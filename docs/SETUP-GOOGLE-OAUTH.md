@@ -1,4 +1,4 @@
-# Create your Google OAuth client
+# Create your Google OAuth client (Gmail)
 
 Ghost-Hub reads your Gmail using an OAuth client that **you** own. One-time setup, ~5 minutes.
 
@@ -11,8 +11,20 @@ Ghost-Hub reads your Gmail using an OAuth client that **you** own. One-time setu
 4. **Credentials → Create credentials → OAuth client ID**:
    - Type: **Web application**.
    - Authorized redirect URI: `<APP_URL>/api/auth/google/callback`
-     (e.g. `http://localhost:3000/api/auth/google/callback`, or your Unraid/reverse-proxy URL).
+     (see [Redirect URIs need HTTPS](#redirect-uris-need-https) below).
 5. Copy the client ID and secret into `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+
+## Redirect URIs need HTTPS
+
+Google only accepts `http://` redirect URIs for `localhost`, and rejects bare IP addresses such as
+`http://192.168.1.10:3000`. For a server on your network, either:
+
+- put Ghost-Hub behind an HTTPS reverse proxy (Nginx Proxy Manager, Caddy, Traefik, Cloudflare Tunnel, Tailscale)
+  on a real domain and set `APP_URL=https://hub.example.com`, or
+- reach Ghost-Hub through `http://localhost:3000` (for example with an SSH port forward:
+  `ssh -L 3000:localhost:3000 your-server`) and set `APP_URL=http://localhost:3000`.
+
+`APP_URL` must be exactly the address you use in the browser, and the redirect URI you register must match it.
 
 ## Refresh tokens expiring after 7 days
 

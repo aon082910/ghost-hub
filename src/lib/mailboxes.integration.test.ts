@@ -23,6 +23,8 @@ describe.skipIf(!url)("mailboxes (integration)", () => {
     process.env.ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
     process.env.GOOGLE_CLIENT_ID = "client-id";
     process.env.GOOGLE_CLIENT_SECRET = "client-secret";
+    process.env.MICROSOFT_CLIENT_ID = "ms-client-id";
+    process.env.MICROSOFT_CLIENT_SECRET = "ms-client-secret";
     const { migrate } = await import("drizzle-orm/node-postgres/migrator");
     const dbMod = await import("@/db");
     db = dbMod.getDb();
@@ -35,7 +37,7 @@ describe.skipIf(!url)("mailboxes (integration)", () => {
 
   beforeEach(async () => {
     fetchMock.mockReset();
-    for (const t of [schema.accounts, schema.newsletters, schema.messagesSeen, schema.scans, schema.oauthTokens]) {
+    for (const t of [schema.accounts, schema.newsletters, schema.messagesSeen, schema.scans, schema.mailboxConnections]) {
       await db.delete(t);
     }
   });
@@ -47,38 +49,71 @@ describe.skipIf(!url)("mailboxes (integration)", () => {
   const tokenOk = (access: string) =>
     new Response(JSON.stringify({ access_token: access, expires_in: 3600 }), { status: 200 });
 
-  it("stores the refresh token encrypted and upserts on reconnect", async () => {
-    await m.saveConnection({ mailbox: "a@gmail.com", refreshToken: "rt-1", scopes: "s" });
-    const [row] = await db.select().from(schema.oauthTokens);
-    expect(row.refreshTokenEnc).not.toContain("rt-1");
-    expect(decrypt(row.refreshTokenEnc)).toBe("rt-1");
+  const oauth = (mailbox: string, refreshToken = "rt", provider: "google" | "microsoft" = "google") =>
+    m.saveConnection({ provider, mailbox, refreshToken, scopes: "s" });
 
-    await db.update(schema.oauthTokens).set({ needsReauth: true });
-    await m.saveConnection({ mailbox: "a@gmail.com", refreshToken: "rt-2", scopes: "s" });
-    const rows = await db.select().from(schema.oauthTokens);
+  it("stores the credential encrypted and upserts on reconnect", async () => {
+    await oauth("a@gmail.com", "rt-1");
+    const [row] = await db.select().from(schema.mailboxConnections);
+    expect(row.credentialEnc).not.toContain("rt-1");
+    expect(decrypt(row.credentialEnc)).toBe("rt-1");
+    expect(row).toMatchObject({ provider: "google", authType: "oauth", imapHost: null });
+
+    await db.update(schema.mailboxConnections).set({ needsReauth: true });
+    await oauth("a@gmail.com", "rt-2");
+    const rows = await db.select().from(schema.mailboxConnections);
     expect(rows).toHaveLength(1);
-    expect(decrypt(rows[0].refreshTokenEnc)).toBe("rt-2");
+    expect(decrypt(rows[0].credentialEnc)).toBe("rt-2");
     expect(rows[0].needsReauth).toBe(false); // reconnecting clears the flag
   });
 
+  it("keeps the same address on different providers apart", async () => {
+    await oauth("same@example.com", "g", "google");
+    await oauth("same@example.com", "m", "microsoft");
+    expect(await db.select().from(schema.mailboxConnections)).toHaveLength(2);
+  });
+
+  it("stores an IMAP app password encrypted with its server, and reads it back", async () => {
+    const imap = { host: "imap.mail.yahoo.com", port: 993, user: "me@yahoo.com", pass: "app-pass" };
+    await m.saveConnection({ provider: "imap", mailbox: imap.user, imap });
+    const [row] = await db.select().from(schema.mailboxConnections);
+    expect(row).toMatchObject({ provider: "imap", authType: "password", imapHost: imap.host, imapPort: 993 });
+    expect(row.credentialEnc).not.toContain("app-pass");
+    expect(await m.getImapCredentials(imap.user)).toEqual(imap);
+    await expect(m.getAccessToken(imap.user)).rejects.toThrow(/not an OAuth mailbox/);
+    await oauth("g@gmail.com");
+    await expect(m.getImapCredentials("g@gmail.com")).rejects.toThrow(/not an IMAP mailbox/);
+  });
+
   it("refreshes an access token once and serves it from cache afterwards", async () => {
-    await m.saveConnection({ mailbox: "cache@gmail.com", refreshToken: "rt", scopes: "s" });
+    await oauth("cache@gmail.com");
     fetchMock.mockResolvedValue(tokenOk("access-1"));
     expect(await m.getAccessToken("cache@gmail.com")).toBe("access-1");
     expect(await m.getAccessToken("cache@gmail.com")).toBe("access-1");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("flags needsReauth when Google answers invalid_grant", async () => {
-    await m.saveConnection({ mailbox: "stale@gmail.com", refreshToken: "rt", scopes: "s" });
+  it("stores a rotated refresh token (Microsoft) but leaves an unchanged one alone", async () => {
+    await oauth("rot@outlook.com", "old-rt", "microsoft");
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ access_token: "a", refresh_token: "new-rt", expires_in: 3600 }), { status: 200 }),
+    );
+    expect(await m.getAccessToken("rot@outlook.com")).toBe("a");
+    const [row] = await db.select().from(schema.mailboxConnections);
+    expect(decrypt(row.credentialEnc)).toBe("new-rt");
+    // The refresh request used the OLD token.
+    expect((fetchMock.mock.calls[0][1]!.body as URLSearchParams).get("refresh_token")).toBe("old-rt");
+  });
+
+  it("flags needsReauth when the provider answers invalid_grant", async () => {
+    await oauth("stale@gmail.com");
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }));
     await expect(m.getAccessToken("stale@gmail.com")).rejects.toMatchObject({ code: "invalid_grant" });
-    const [conn] = await m.listConnections();
-    expect(conn.needsReauth).toBe(true);
+    expect((await m.listConnections())[0].needsReauth).toBe(true);
   });
 
   it("does not flag needsReauth for transient errors", async () => {
-    await m.saveConnection({ mailbox: "flaky@gmail.com", refreshToken: "rt", scopes: "s" });
+    await oauth("flaky@gmail.com");
     fetchMock.mockResolvedValue(new Response("bad gateway", { status: 502 }));
     await expect(m.getAccessToken("flaky@gmail.com")).rejects.toMatchObject({ code: "http_502" });
     expect((await m.listConnections())[0].needsReauth).toBe(false);
@@ -104,11 +139,15 @@ describe.skipIf(!url)("mailboxes (integration)", () => {
   });
 
   it("disconnect revokes at Google and keeps discovered data", async () => {
-    await m.saveConnection({ mailbox: "keep@gmail.com", refreshToken: "rt-keep", scopes: "s" });
+    await oauth("keep@gmail.com", "rt-keep");
     await seedDiscoveredData("keep@gmail.com");
     fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
 
-    expect(await m.disconnectMailbox("keep@gmail.com", { wipe: false })).toEqual({ revoked: true, found: true });
+    expect(await m.disconnectMailbox("keep@gmail.com", { wipe: false })).toEqual({
+      found: true,
+      provider: "google",
+      revoked: true,
+    });
     const body = fetchMock.mock.calls[0][1]!.body as URLSearchParams;
     expect(body.get("token")).toBe("rt-keep"); // the decrypted token was revoked
     expect(await m.listConnections()).toHaveLength(0);
@@ -116,19 +155,36 @@ describe.skipIf(!url)("mailboxes (integration)", () => {
   });
 
   it("disconnect with wipe deletes only that mailbox's data, even if revoke fails", async () => {
-    await m.saveConnection({ mailbox: "gone@gmail.com", refreshToken: "rt", scopes: "s" });
-    await m.saveConnection({ mailbox: "other@gmail.com", refreshToken: "rt", scopes: "s" });
+    await oauth("gone@gmail.com");
+    await oauth("other@gmail.com");
     await seedDiscoveredData("gone@gmail.com");
     await seedDiscoveredData("other@gmail.com");
     fetchMock.mockRejectedValue(new Error("offline"));
 
-    expect(await m.disconnectMailbox("gone@gmail.com", { wipe: true })).toEqual({ revoked: false, found: true });
+    expect(await m.disconnectMailbox("gone@gmail.com", { wipe: true })).toEqual({
+      found: true,
+      provider: "google",
+      revoked: false,
+    });
     expect((await m.listConnections()).map((c) => c.mailbox)).toEqual(["other@gmail.com"]);
     expect(await counts()).toEqual({ accounts: 1, newsletters: 1, messagesSeen: 1, scans: 1 });
     expect((await db.select().from(schema.accounts))[0].mailbox).toBe("other@gmail.com");
   });
 
+  it("disconnect reports revoked=null for providers that can't revoke (Microsoft, IMAP) without calling out", async () => {
+    await oauth("ms@outlook.com", "rt", "microsoft");
+    await m.saveConnection({
+      provider: "imap",
+      mailbox: "me@yahoo.com",
+      imap: { host: "imap.mail.yahoo.com", port: 993, user: "me@yahoo.com", pass: "p" },
+    });
+    expect(await m.disconnectMailbox("ms@outlook.com", { wipe: false })).toEqual({ found: true, provider: "microsoft", revoked: null });
+    expect(await m.disconnectMailbox("me@yahoo.com", { wipe: false })).toEqual({ found: true, provider: "imap", revoked: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await m.listConnections()).toHaveLength(0);
+  });
+
   it("disconnecting an unknown mailbox is a no-op", async () => {
-    expect(await m.disconnectMailbox("nobody@gmail.com", { wipe: true })).toEqual({ revoked: false, found: false });
+    expect(await m.disconnectMailbox("nobody@gmail.com", { wipe: true })).toEqual({ found: false });
   });
 });

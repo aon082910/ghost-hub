@@ -13,20 +13,26 @@ import {
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
-/** Connected mailbox credentials. The refresh token is AES-256-GCM encrypted (see lib/crypto). */
-export const oauthTokens = pgTable(
-  "oauth_tokens",
+/**
+ * Connected mailboxes of any provider. `credential_enc` holds an OAuth refresh token or an IMAP
+ * app password, AES-256-GCM encrypted (see lib/crypto).
+ */
+export const mailboxConnections = pgTable(
+  "mailbox_connections",
   {
     id: serial("id").primaryKey(),
-    provider: text("provider").notNull(), // 'google' | 'microsoft'
+    provider: text("provider").notNull(), // 'google' | 'microsoft' | 'imap'
     mailbox: text("mailbox").notNull(),
-    refreshTokenEnc: text("refresh_token_enc").notNull(),
-    scopes: text("scopes").notNull(),
-    /** Set when Google rejects the refresh token (e.g. 7-day expiry in Testing mode). */
+    authType: text("auth_type").notNull(), // 'oauth' | 'password'
+    credentialEnc: text("credential_enc").notNull(),
+    scopes: text("scopes"),
+    imapHost: text("imap_host"),
+    imapPort: integer("imap_port"),
+    /** Set when the provider rejects the stored credential and the user must reconnect. */
     needsReauth: boolean("needs_reauth").notNull().default(false),
     connectedAt: createdAt().notNull(),
   },
-  (t) => [unique("oauth_tokens_provider_mailbox").on(t.provider, t.mailbox)],
+  (t) => [unique("mailbox_connections_provider_mailbox").on(t.provider, t.mailbox)],
 );
 
 /** One row per scan run, drives the progress UI and makes scans resumable. */

@@ -15,6 +15,20 @@
       "when": 1791066235269,
       "tag": "0001_amusing_angel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791067580894,
+      "tag": "0002_dizzy_scourge",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791067593126,
+      "tag": "0003_even_whizzer",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,10 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_CLIENT_ID: z.string().optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().optional(),
+  /** "common" accepts personal and work/school accounts; use "consumers" or a tenant id to narrow it. */
+  MICROSOFT_TENANT: z.string().min(1).default("common"),
   HIBP_API_KEY: z.string().optional(),
 });
 

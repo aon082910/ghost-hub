@@ -7,7 +7,7 @@ published on GitHub so others can host their own.
 
 | Step | What Ghost-Hub does |
 |------|---------------------|
-| 1. Connect | Gmail OAuth with the user's own Google Cloud client (Outlook later) |
+| 1. Connect | Gmail and Outlook / Microsoft 365 via the user's own OAuth apps; Yahoo, AOL, iCloud and other IMAP mailboxes via app password |
 | 2. Scan | Gmail scanner that finds the services you've signed up for, a username/email/phone profile checker, and breach matching |
 | 3. Dashboard | Accounts, linked profiles, breach risk, gift cards, subscriptions and newsletters, risk-scored |
 | 4. Act | Deletion guides, bulk unsubscribe, value recovery. Every action needs explicit approval |
@@ -15,6 +15,8 @@ published on GitHub so others can host their own.
 ## Key decisions
 
 - **Stack:** Next.js (App Router) + TypeScript + Tailwind + PostgreSQL. ORM: Drizzle (decided).
+- **Yahoo:** Yahoo's mail OAuth requires a signed commercial agreement, so Yahoo (and AOL, iCloud, any IMAP host) connect over IMAP with an app password on implicit TLS (993) only. Providers that have disabled password IMAP (Gmail, Outlook.com) use their OAuth connectors.
+- **Microsoft:** Graph with `Mail.Read` + `User.Read` + `offline_access`, tenant `common` by default. Refresh tokens rotate on every use and are stored again. Redirect URIs must be HTTPS except localhost (same for Google), so LAN installs need a reverse proxy or a localhost tunnel.
 - **Self-host OAuth:** each user creates their own Google OAuth client, so there is no shared secret and no
   Google verification process. Scope: `gmail.readonly` only. Caveat: apps left in "Testing" status get refresh
   tokens that expire after 7 days — document switching the consent screen to "In production" (unverified is fine
@@ -35,19 +37,19 @@ published on GitHub so others can host their own.
 - `shadow_profiles` — site, identifier type, URL, found_at, status
 - `breaches` — cached HIBP breach list
 - `actions` — queued/approved/executed user actions (audit log)
-- `oauth_tokens` — encrypted refresh token, scopes, connected_at
+- `mailbox_connections` — provider (google/microsoft/imap), mailbox, auth type, encrypted credential (refresh token or app password), IMAP host/port, needs_reauth
 
 ## Milestones
 
 1. **Foundation** *(done)* — scaffold, Docker/Unraid files, docs, Drizzle + Postgres with auto-migrate on startup, zod env validation, admin login (signed session cookie, login rate limit), `/api/health`, Docker healthcheck.
-2. **Gmail connect** *(done)* — OAuth code flow with PKCE + state, encrypted refresh token, access-token refresh with `needsReauth` flag on `invalid_grant`, disconnect (revokes at Google) with optional data wipe. Tested end to end against a fake Google server.
-3. **Inbox scan** — paged Gmail fetch (headers only first), sign-up/welcome/receipt heuristics, domain→service
-   grouping, resumable scan with progress UI.
+2. **Mailbox connect** *(done)* — Gmail and Microsoft over a generic OAuth core (code flow + PKCE + state, encrypted refresh tokens, rotated-token storage, `needsReauth` on `invalid_grant`), plus IMAP + app password for Yahoo/AOL/iCloud/custom (login verified before saving). Disconnect revokes at Google; Microsoft and IMAP can't be revoked remotely so the UI says what to remove by hand. Optional data wipe. Tested end to end against fake Google/Microsoft servers; the IMAP success path is only covered by unit tests with a mocked client.
+3. **Inbox scan** — a `MailSource` interface with three implementations (Gmail API, Microsoft Graph, IMAP): paged
+   header-only fetch, sign-up/welcome/receipt heuristics, domain→service grouping, resumable scan with progress UI.
 4. **Dashboard + risk** — accounts list, breach matching, risk score, filters.
 5. **Newsletters** — `List-Unsubscribe` detection, review queue, bulk unsubscribe (one-click POST + mailto).
 6. **Shadow scanner** — site list, username/email/phone checks, rate limiting, results view.
 7. **Value recovery** — detect gift cards/coupons/rewards in receipts and promos.
-8. **Polish** — deletion guides, Outlook (Microsoft Graph), Unraid Community Apps template, release docs.
+8. **Polish** — deletion guides, Unraid Community Apps template, release docs.
 
 ## Open questions
 

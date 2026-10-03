@@ -3,6 +3,7 @@ import { decrypt } from "./crypto";
 import { getEnv } from "./env";
 
 export const OAUTH_COOKIE = "ghosthub_oauth";
+export const OAUTH_COOKIE_PATH = "/api/auth";
 export const OAUTH_COOKIE_MAX_AGE = 10 * 60;
 
 /** Absolute URL on the configured public origin (request.url can be an internal Docker host). */
@@ -10,13 +11,15 @@ export function appUrl(path: string): URL {
   return new URL(path, getEnv().APP_URL);
 }
 
-/** Read the {state, verifier} the start route stored. Returns null if missing, tampered or malformed. */
-export function readOAuthCookie(value: string | undefined): { state: string; verifier: string } | null {
+export type OAuthFlow = { provider: string; state: string; verifier: string };
+
+/** Read what the start route stored. Returns null if missing, tampered or malformed. */
+export function readOAuthCookie(value: string | undefined): OAuthFlow | null {
   if (!value) return null;
   try {
-    const parsed = JSON.parse(decrypt(value)) as { state?: unknown; verifier?: unknown };
-    if (typeof parsed.state !== "string" || typeof parsed.verifier !== "string") return null;
-    return { state: parsed.state, verifier: parsed.verifier };
+    const p = JSON.parse(decrypt(value)) as Partial<Record<keyof OAuthFlow, unknown>>;
+    if (typeof p.provider !== "string" || typeof p.state !== "string" || typeof p.verifier !== "string") return null;
+    return { provider: p.provider, state: p.state, verifier: p.verifier };
   } catch {
     return null;
   }

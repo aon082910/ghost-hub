@@ -8,7 +8,8 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
 
 ## What it does
 
-1. **Connect** — Gmail via Google OAuth (read-only). Outlook is planned.
+1. **Connect** — Gmail (Google OAuth), Outlook / Microsoft 365 (Microsoft OAuth) and Yahoo, AOL, iCloud or any
+   IMAP mailbox (app password). All read-only, any number of mailboxes.
 2. **Scan** — finds services from sign-up, welcome, verification and receipt emails; optionally searches the
    web for "shadow profiles" under your email, phone or username. Everything is checked against breach data.
 3. **Dashboard** — accounts grouped by service, risk-scored, with breach flags and newsletter detection.
@@ -19,7 +20,7 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
 - Self-hosted: runs on your machine or Unraid server. No hosted backend, no telemetry.
 - Raw email content is processed in memory and never written to disk. Only derived facts are stored
   (service domain, first/last seen, message count, category, unsubscribe link).
-- OAuth refresh tokens are encrypted at rest (AES-256-GCM).
+- OAuth refresh tokens and IMAP app passwords are encrypted at rest (AES-256-GCM).
 - You can disconnect and wipe all data from the UI at any time.
 
 ## Quick start (Docker)
@@ -29,8 +30,16 @@ cp .env.example .env      # then fill in the values
 docker compose up -d
 ```
 
-Open <http://localhost:3000>. See [docs/SETUP-GOOGLE-OAUTH.md](docs/SETUP-GOOGLE-OAUTH.md) for creating your
-Google OAuth client (required once; takes ~5 minutes).
+Open <http://localhost:3000>, then connect the mailboxes you use. Each provider is optional:
+
+| Provider | Setup | Guide |
+|----------|-------|-------|
+| Gmail | Your own Google OAuth client (~5 min, once) | [docs/SETUP-GOOGLE-OAUTH.md](docs/SETUP-GOOGLE-OAUTH.md) |
+| Outlook / Microsoft 365 | Your own Entra app registration (~5 min, once) | [docs/SETUP-MICROSOFT-OAUTH.md](docs/SETUP-MICROSOFT-OAUTH.md) |
+| Yahoo, AOL, iCloud, other IMAP | An app password, entered in the UI | [docs/SETUP-YAHOO-IMAP.md](docs/SETUP-YAHOO-IMAP.md) |
+
+Google and Microsoft only accept `http://` redirect URIs on `localhost`, so a server on your network needs an
+HTTPS address (reverse proxy) or access through `localhost`. The guides explain both.
 
 ## Development
 
