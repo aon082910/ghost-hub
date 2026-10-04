@@ -18,8 +18,10 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
 ## Privacy model
 
 - Self-hosted: runs on your machine or Unraid server. No hosted backend, no telemetry.
-- Raw email content is processed in memory and never written to disk. Only derived facts are stored
-  (service domain, first/last seen, message count, category, unsubscribe link).
+- Scans read message **headers only** (sender, subject, date and the list-unsubscribe headers), never message
+  bodies or attachments. Subjects are used in memory to classify a message and are never stored. Only derived
+  facts are kept: service domain, first/last seen, message count, category, unsubscribe link, and an opaque
+  id per scanned message so a rescan can skip it.
 - OAuth refresh tokens and IMAP app passwords are encrypted at rest (AES-256-GCM).
 - You can disconnect and wipe all data from the UI at any time.
 

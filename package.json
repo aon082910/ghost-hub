@@ -19,6 +19,7 @@
     "pg": "^8.23.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "tldts": "^7.4.16",
     "zod": "^4.6.5"
   },
   "devDependencies": {

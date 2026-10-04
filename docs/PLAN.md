@@ -43,13 +43,42 @@ published on GitHub so others can host their own.
 
 1. **Foundation** *(done)* — scaffold, Docker/Unraid files, docs, Drizzle + Postgres with auto-migrate on startup, zod env validation, admin login (signed session cookie, login rate limit), `/api/health`, Docker healthcheck.
 2. **Mailbox connect** *(done)* — Gmail and Microsoft over a generic OAuth core (code flow + PKCE + state, encrypted refresh tokens, rotated-token storage, `needsReauth` on `invalid_grant`), plus IMAP + app password for Yahoo/AOL/iCloud/custom (login verified before saving). Disconnect revokes at Google; Microsoft and IMAP can't be revoked remotely so the UI says what to remove by hand. Optional data wipe. Tested end to end against fake Google/Microsoft servers; the IMAP success path is only covered by unit tests with a mocked client.
-3. **Inbox scan** — a `MailSource` interface with three implementations (Gmail API, Microsoft Graph, IMAP): paged
-   header-only fetch, sign-up/welcome/receipt heuristics, domain→service grouping, resumable scan with progress UI.
+3. **Inbox scan** *(done)* — a `MailSource` interface with three implementations (Gmail API, Microsoft Graph, IMAP):
+   paged header-only fetch, domain→service grouping, resumable scan with progress, cancel and a results list.
+   Verified end to end against fake Gmail and Graph mailboxes; the IMAP source is covered by unit tests with a
+   fake client only. See "How scanning works" below.
 4. **Dashboard + risk** — accounts list, breach matching, risk score, filters.
 5. **Newsletters** — `List-Unsubscribe` detection, review queue, bulk unsubscribe (one-click POST + mailto).
 6. **Shadow scanner** — site list, username/email/phone checks, rate limiting, results view.
 7. **Value recovery** — detect gift cards/coupons/rewards in receipts and promos.
 8. **Polish** — deletion guides, Unraid Community Apps template, release docs.
+
+## How scanning works
+
+- **Sources** read headers only, newest first. Gmail: list ids, skip seen ones, fetch `format=metadata` with 8
+  parallel requests, excluding sent mail, drafts and chats (spam and trash are excluded by the API). Graph:
+  `$select` of headers with stable (`ImmutableId`) message ids, skipping Junk, Deleted, Sent and Drafts folders,
+  and refusing any pagination link that leaves Graph's host. IMAP: every folder except Junk/Trash/Sent/Drafts
+  (by special-use flag, falling back to folder name for servers like Yahoo whose spam folder is "Bulk"). All
+  sources retry 429/5xx with Retry-After and time out after 30 s per request.
+- **Classification** (`src/lib/scan/classify.ts`) works from the sender's registrable domain plus the subject and
+  list headers: account (sign-up, verification, security, sign-in), subscription (billing, renewals, trials),
+  receipt (orders, invoices, shipping) or newsletter (bulk mail). Mail from free providers, from the user, or
+  from the user's own domain is ignored, as is mail with no signal. A service's category is the strongest
+  evidence seen. It's a heuristic and will have false positives and negatives; tune the regexes and add test
+  cases when you find them.
+- **Exactness:** each page of results and its "seen" ids are saved in one transaction, so a crash, cancel or
+  restart can never double count or lose a message, and scanning again continues where it stopped. Scans left
+  "running" by a restart are marked failed on startup. One scan runs per mailbox at a time.
+- **Newsletters:** `List-Unsubscribe` links and the one-click flag are recorded during the scan so the
+  unsubscribe milestone needs no rescan. They're untrusted data from emails: validate before ever using them.
+
+## Known gaps / backlog
+
+- No scan depth limit (e.g. "last 3 years"); a very large mailbox is scanned in full.
+- Scans run inside the web server process; they don't survive a restart (they resume on the next scan).
+- IMAP has never been run against a real server, only a fake client.
+- Services are listed per domain; related domains (amazon.com / amazon.co.uk) aren't merged.
 
 ## Open questions
 

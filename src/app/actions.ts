@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { ImapConnectError, parseImapForm, verifyImapLogin } from "@/lib/imap";
-import { disconnectMailbox, saveConnection } from "@/lib/mailboxes";
+import { disconnectMailbox, findConnection, saveConnection } from "@/lib/mailboxes";
+import { cancelScan, startScan } from "@/lib/scan/registry";
 
 export type ConnectImapState = { error?: string };
 
@@ -39,4 +40,20 @@ export async function connectImap(_prev: ConnectImapState, formData: FormData): 
 
   await saveConnection({ provider: "imap", mailbox: parsed.credentials.user, imap: parsed.credentials });
   redirect(`/?connected=${encodeURIComponent(parsed.credentials.user)}`);
+}
+
+/** Start scanning a connected mailbox in the background. Safe to click twice: it won't start a second scan. */
+export async function scanMailbox(formData: FormData) {
+  await requireSession();
+  const mailbox = formData.get("mailbox");
+  if (typeof mailbox !== "string" || !(await findConnection(mailbox))) redirect("/");
+  await startScan(mailbox);
+  redirect("/");
+}
+
+export async function cancelMailboxScan(formData: FormData) {
+  await requireSession();
+  const mailbox = formData.get("mailbox");
+  if (typeof mailbox === "string") cancelScan(mailbox);
+  redirect("/");
 }

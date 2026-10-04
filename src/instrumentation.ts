@@ -5,4 +5,6 @@ export async function register() {
   getEnv();
   const { runMigrations } = await import("./db/migrate");
   await runMigrations();
+  const { markInterruptedScans } = await import("./lib/scan/registry");
+  await markInterruptedScans();
 }

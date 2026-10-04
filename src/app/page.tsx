@@ -1,10 +1,14 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { IMAP_PRESETS } from "@/lib/imap";
 import { listConnections } from "@/lib/mailboxes";
 import { OAUTH_PROVIDERS, getOAuthProvider } from "@/lib/oauth";
-import { disconnect } from "./actions";
+import { CATEGORIES, discoveredCounts, isCategory, listDiscovered } from "@/lib/discovered";
+import { isScanning, latestScan } from "@/lib/scan/registry";
+import { cancelMailboxScan, disconnect, scanMailbox } from "./actions";
 import { ImapForm } from "./imap-form";
 import { logout } from "./login/actions";
+import { ScanProgress } from "./scan-progress";
 
 const ERRORS: Record<string, string> = {
   not_configured: "That provider isn't configured. Set its client ID and secret (see the docs folder), then restart.",
@@ -19,9 +23,17 @@ const ERRORS: Record<string, string> = {
 
 const PROVIDER_NAME: Record<string, string> = { google: "Gmail", microsoft: "Outlook", imap: "IMAP" };
 
+const CATEGORY_LABEL = { account: "Accounts", subscription: "Subscriptions", receipt: "Receipts", newsletter: "Newsletters" } as const;
+const CATEGORY_SINGULAR = { account: "Account", subscription: "Subscription", receipt: "Receipt", newsletter: "Newsletter" } as const;
+const CATEGORY_HINT = {
+  account: "Sign-up, verification, security and sign-in emails",
+  subscription: "Billing, renewals and trials",
+  receipt: "Orders, invoices and shipping",
+  newsletter: "Marketing and mailing lists only",
+} as const;
+
 const LATER_STEPS = [
-  { title: "Scan", detail: "Discover every service you've signed up for." },
-  { title: "Dashboard", detail: "Accounts, breach risk, newsletters, linked profiles." },
+  { title: "Dashboard", detail: "Breach risk, deletion guides and linked profiles." },
   { title: "Take action", detail: "Deletion guides and bulk unsubscribe, review-first." },
 ];
 
@@ -60,6 +72,10 @@ export default async function Home(props: PageProps<"/">) {
   await requireSession();
   const [sp, connections] = await Promise.all([props.searchParams, listConnections()]);
   const note = banner(sp);
+  const scansByMailbox = new Map(await Promise.all(connections.map(async (c) => [c.mailbox, await latestScan(c.mailbox)] as const)));
+  const cat = typeof sp.cat === "string" && isCategory(sp.cat) ? sp.cat : undefined;
+  const [counts, services] = await Promise.all([discoveredCounts(), listDiscovered(cat)]);
+  const totalServices = Object.values(counts).reduce((a, b) => a + b, 0);
   const oauthButtons = Object.values(OAUTH_PROVIDERS).map((p) => ({
     id: p.id,
     label: p.label,
@@ -137,6 +153,7 @@ export default async function Home(props: PageProps<"/">) {
                     Disconnect and delete data
                   </button>
                 </form>
+                <ScanStatus mailbox={c.mailbox} scan={scansByMailbox.get(c.mailbox) ?? null} />
               </li>
             ))}
           </ul>
@@ -168,12 +185,55 @@ export default async function Home(props: PageProps<"/">) {
         </details>
       </section>
 
-      <ol start={2} className="space-y-3">
+      <section className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+        <h2 className="font-medium text-zinc-100">2. Discovered services</h2>
+        {totalServices === 0 ? (
+          <p className="mt-1 text-sm text-zinc-400">
+            Nothing yet. Connect a mailbox and press Scan. Ghost-Hub reads message headers only (sender, subject and
+            date), never message bodies, and doesn&apos;t keep subjects.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-zinc-400">{totalServices.toLocaleString("en-US")} services found across your mailboxes.</p>
+            <nav className="mt-3 flex flex-wrap gap-2 text-xs" aria-label="Filter by type">
+              <Link href="/" className={chip(!cat)}>All ({totalServices})</Link>
+              {CATEGORIES.map((c) => (
+                <Link key={c} href={`/?cat=${c}`} className={chip(cat === c)} title={CATEGORY_HINT[c]}>
+                  {CATEGORY_LABEL[c]} ({counts[c]})
+                </Link>
+              ))}
+            </nav>
+            <ul className="mt-3 divide-y divide-zinc-900">
+              {services.map((s) => (
+                <li key={s.domain} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-zinc-100">{s.name}</div>
+                    <div className="truncate text-xs text-zinc-500">{s.domain}</div>
+                  </div>
+                  <div className="shrink-0 text-right text-xs text-zinc-500">
+                    <div>
+                      <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
+                        {CATEGORY_SINGULAR[s.category]}
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      {s.messages.toLocaleString("en-US")} msgs, {s.firstSeen.getUTCFullYear()}
+                      {s.lastSeen.getUTCFullYear() !== s.firstSeen.getUTCFullYear() ? `-${s.lastSeen.getUTCFullYear()}` : ""}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <ol start={3} className="space-y-3">
         {LATER_STEPS.map((s, i) => (
           <li key={s.title} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
             <div className="flex items-center justify-between">
               <span className="font-medium text-zinc-100">
-                {i + 2}. {s.title}
+                {i + 3}. {s.title}
               </span>
               <span className="text-xs text-zinc-500">Planned</span>
             </div>
@@ -182,5 +242,55 @@ export default async function Home(props: PageProps<"/">) {
         ))}
       </ol>
     </main>
+  );
+}
+
+const chip = (active: boolean) =>
+  `rounded-full border px-2.5 py-1 transition ${
+    active ? "border-emerald-700 bg-emerald-950/50 text-emerald-300" : "border-zinc-800 text-zinc-400 hover:border-zinc-600"
+  }`;
+
+type LatestScan = Awaited<ReturnType<typeof latestScan>>;
+
+function ScanStatus({ mailbox, scan }: { mailbox: string; scan: LatestScan }) {
+  const running = scan?.status === "running" && isScanning(mailbox);
+  const btn = "rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500";
+
+  if (running && scan) {
+    return (
+      <div className="w-full">
+        <ScanProgress
+          scanId={scan.id}
+          initial={{ status: scan.status, processed: scan.messagesProcessed, total: scan.messagesTotal, error: null }}
+        />
+        <form action={cancelMailboxScan} className="mt-2">
+          <input type="hidden" name="mailbox" value={mailbox} />
+          <button className={btn}>Cancel scan</button>
+        </form>
+      </div>
+    );
+  }
+
+  const when = scan?.finishedAt?.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  const summary = !scan
+    ? "Not scanned yet."
+    : scan.status === "done"
+      ? `Scanned ${scan.messagesProcessed.toLocaleString("en-US")} messages, ${when}.`
+      : scan.status === "cancelled"
+        ? `Scan cancelled after ${scan.messagesProcessed.toLocaleString("en-US")} messages. Scanning again continues where it stopped.`
+        : null;
+
+  return (
+    <div className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-zinc-900 pt-2">
+      <p className={`text-xs ${scan?.status === "failed" ? "text-amber-400" : "text-zinc-500"}`}>
+        {scan?.status === "failed" ? `Last scan failed: ${scan.error ?? "unknown error"}` : summary}
+      </p>
+      <form action={scanMailbox}>
+        <input type="hidden" name="mailbox" value={mailbox} />
+        <button className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400">
+          {scan ? "Scan again" : "Scan"}
+        </button>
+      </form>
+    </div>
   );
 }

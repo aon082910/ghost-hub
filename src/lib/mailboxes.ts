@@ -52,7 +52,8 @@ export async function listConnections() {
     .orderBy(mailboxConnections.connectedAt);
 }
 
-async function findConnection(mailbox: string) {
+/** The stored connection for a mailbox address, if any (credential still encrypted). */
+export async function findConnection(mailbox: string) {
   const [row] = await getDb().select().from(mailboxConnections).where(eq(mailboxConnections.mailbox, mailbox));
   return row;
 }

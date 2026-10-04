@@ -1,0 +1,84 @@
+import { gmailApiBase } from "../oauth/google";
+import { chunk, mapLimit, requestJson, type HttpDeps } from "./http";
+import { HEADER_NAMES, type MailSource, type MessageHeader, type PagesOptions } from "./types";
+import { parseAddress } from "./classify";
+
+type GmailList = { messages?: { id: string }[]; nextPageToken?: string };
+type GmailMessage = { id: string; internalDate?: string; payload?: { headers?: { name: string; value: string }[] } };
+
+const PAGE_SIZE = 500;
+const YIELD_EVERY = 100;
+// Sent mail and drafts are the user talking, not services talking to the user. Spam and trash are
+// excluded by Gmail's list endpoint unless asked for.
+const QUERY = "-in:sent -in:drafts -in:chats";
+
+export type GmailSourceOptions = HttpDeps & {
+  getToken: () => Promise<string>;
+  base?: string;
+  concurrency?: number;
+};
+
+/** Reads message headers through the Gmail API with the read-only scope. Bodies are never requested. */
+export class GmailSource implements MailSource {
+  constructor(private readonly o: GmailSourceOptions) {}
+
+  private get base() {
+    return this.o.base ?? gmailApiBase();
+  }
+
+  private async get<T>(path: string, signal?: AbortSignal, allow404 = false): Promise<T | null> {
+    return requestJson<T>(
+      `${this.base}${path}`,
+      { headers: { authorization: `Bearer ${await this.o.getToken()}` } },
+      { fetchImpl: this.o.fetchImpl, sleep: this.o.sleep, allow404, signal },
+    );
+  }
+
+  async total(): Promise<number | null> {
+    const p = await this.get<{ messagesTotal?: number }>("/users/me/profile");
+    return p?.messagesTotal ?? null;
+  }
+
+  async *pages({ skip, signal }: PagesOptions): AsyncIterable<MessageHeader[]> {
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({ maxResults: String(PAGE_SIZE), q: QUERY });
+      if (pageToken) params.set("pageToken", pageToken);
+      const list = (await this.get<GmailList>(`/users/me/messages?${params}`, signal))!;
+
+      const ids = (list.messages ?? []).map((m) => m.id).filter((id) => !skip(id));
+      for (const group of chunk(ids, YIELD_EVERY)) {
+        signal?.throwIfAborted();
+        const fetched = await mapLimit(group, this.o.concurrency ?? 8, (id) => this.metadata(id, signal));
+        const headers = fetched.filter((m): m is MessageHeader => m !== null);
+        if (headers.length) yield headers;
+      }
+      pageToken = list.nextPageToken;
+    } while (pageToken);
+  }
+
+  private async metadata(id: string, signal?: AbortSignal): Promise<MessageHeader | null> {
+    const params = new URLSearchParams({ format: "metadata", fields: "id,internalDate,payload/headers" });
+    for (const h of HEADER_NAMES) params.append("metadataHeaders", h);
+    const m = await this.get<GmailMessage>(`/users/me/messages/${encodeURIComponent(id)}?${params}`, signal, true);
+    if (!m) return null; // deleted between list and get
+
+    const h: Record<string, string> = {};
+    for (const { name, value } of m.payload?.headers ?? []) h[name.toLowerCase()] ??= value;
+    const from = h.from ? parseAddress(h.from) : null;
+    const ms = Number(m.internalDate);
+    return {
+      id: m.id,
+      date: new Date(Number.isFinite(ms) && ms > 0 ? ms : 0),
+      fromEmail: from?.email ?? "",
+      fromName: from?.name ?? null,
+      subject: h.subject ?? "",
+      listUnsubscribe: h["list-unsubscribe"],
+      listUnsubscribePost: h["list-unsubscribe-post"],
+      listId: h["list-id"],
+      precedence: h.precedence,
+    };
+  }
+
+  async close() {}
+}
