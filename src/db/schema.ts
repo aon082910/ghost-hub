@@ -1,6 +1,5 @@
 import {
   boolean,
-  index,
   integer,
   jsonb,
   pgTable,
@@ -70,15 +69,10 @@ export const accounts = pgTable(
     firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
     messageCount: integer("message_count").notNull().default(1),
-    breached: boolean("breached").notNull().default(false),
-    riskScore: integer("risk_score").notNull().default(0),
     deletionUrl: text("deletion_url"),
     status: text("status").notNull().default("active"), // active | ignored | deleted
   },
-  (t) => [
-    unique("accounts_mailbox_domain").on(t.mailbox, t.domain),
-    index("accounts_risk_idx").on(t.riskScore),
-  ],
+  (t) => [unique("accounts_mailbox_domain").on(t.mailbox, t.domain)],
 );
 
 export const newsletters = pgTable(
@@ -123,6 +117,26 @@ export const breaches = pgTable("breaches", {
   dataClasses: jsonb("data_classes").$type<string[]>().notNull().default([]),
   isVerified: boolean("is_verified").notNull().default(true),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Breaches HIBP says a connected mailbox address appears in. Only filled when the user configures an
+ * HIBP API key and asks for a check. Without it, breaches are matched to services by domain alone.
+ */
+export const mailboxBreaches = pgTable(
+  "mailbox_breaches",
+  {
+    mailbox: text("mailbox").notNull(),
+    breachName: text("breach_name").notNull(),
+  },
+  (t) => [unique("mailbox_breaches_pk").on(t.mailbox, t.breachName)],
+);
+
+/** When each mailbox was last checked against HIBP, and how it went (also records "checked, found nothing"). */
+export const breachChecks = pgTable("breach_checks", {
+  mailbox: text("mailbox").primaryKey(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  breachCount: integer("breach_count").notNull().default(0),
 });
 
 /** Audit log of review-first actions: nothing executes until status = approved. */

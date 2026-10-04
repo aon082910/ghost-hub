@@ -53,11 +53,15 @@ const ORDER = [
 const TRANSACTIONAL_LOCAL =
   /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|noreply|notifications?|notify|accounts?|security|billing|orders?|receipts?|alerts?|mailer|account[-_.]?security|verify|verification|password)$/;
 
-export function registrableDomain(email: string): string | null {
-  const host = email.split("@")[1]?.trim().toLowerCase();
-  if (!host) return null;
-  const p = parseDomain(host);
+/** The registrable domain of a hostname (`mail.example.co.uk` → `example.co.uk`), or null for IPs and unknown TLDs. */
+export function registrableFromHost(host: string): string | null {
+  const p = parseDomain(host.trim().toLowerCase());
   return p.domain && p.isIcann ? p.domain : null;
+}
+
+export function registrableDomain(email: string): string | null {
+  const host = email.split("@")[1];
+  return host ? registrableFromHost(host) : null;
 }
 
 const titleCase = (s: string) => s.replace(/(^|[-\s])([a-z])/g, (_, a, b) => a + b.toUpperCase());

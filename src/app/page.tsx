@@ -3,12 +3,12 @@ import { requireSession } from "@/lib/auth";
 import { IMAP_PRESETS } from "@/lib/imap";
 import { listConnections } from "@/lib/mailboxes";
 import { OAUTH_PROVIDERS, getOAuthProvider } from "@/lib/oauth";
-import { CATEGORIES, discoveredCounts, isCategory, listDiscovered } from "@/lib/discovered";
+import { loadServices, summarize } from "@/lib/dashboard";
 import { isScanning, latestScan } from "@/lib/scan/registry";
 import { cancelMailboxScan, disconnect, scanMailbox } from "./actions";
 import { ImapForm } from "./imap-form";
-import { logout } from "./login/actions";
 import { ScanProgress } from "./scan-progress";
+import { SiteHeader } from "./site-header";
 
 const ERRORS: Record<string, string> = {
   not_configured: "That provider isn't configured. Set its client ID and secret (see the docs folder), then restart.",
@@ -23,18 +23,8 @@ const ERRORS: Record<string, string> = {
 
 const PROVIDER_NAME: Record<string, string> = { google: "Gmail", microsoft: "Outlook", imap: "IMAP" };
 
-const CATEGORY_LABEL = { account: "Accounts", subscription: "Subscriptions", receipt: "Receipts", newsletter: "Newsletters" } as const;
-const CATEGORY_SINGULAR = { account: "Account", subscription: "Subscription", receipt: "Receipt", newsletter: "Newsletter" } as const;
-const CATEGORY_HINT = {
-  account: "Sign-up, verification, security and sign-in emails",
-  subscription: "Billing, renewals and trials",
-  receipt: "Orders, invoices and shipping",
-  newsletter: "Marketing and mailing lists only",
-} as const;
-
 const LATER_STEPS = [
-  { title: "Dashboard", detail: "Breach risk, deletion guides and linked profiles." },
-  { title: "Take action", detail: "Deletion guides and bulk unsubscribe, review-first." },
+  { title: "Take action", detail: "Deletion guides, bulk unsubscribe and linked profiles, review-first." },
 ];
 
 type Params = Record<string, string | string[] | undefined>;
@@ -73,9 +63,7 @@ export default async function Home(props: PageProps<"/">) {
   const [sp, connections] = await Promise.all([props.searchParams, listConnections()]);
   const note = banner(sp);
   const scansByMailbox = new Map(await Promise.all(connections.map(async (c) => [c.mailbox, await latestScan(c.mailbox)] as const)));
-  const cat = typeof sp.cat === "string" && isCategory(sp.cat) ? sp.cat : undefined;
-  const [counts, services] = await Promise.all([discoveredCounts(), listDiscovered(cat)]);
-  const totalServices = Object.values(counts).reduce((a, b) => a + b, 0);
+  const summary = summarize(await loadServices());
   const oauthButtons = Object.values(OAUTH_PROVIDERS).map((p) => ({
     id: p.id,
     label: p.label,
@@ -90,12 +78,7 @@ export default async function Home(props: PageProps<"/">) {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <header className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-50">Ghost-Hub</h1>
-        <form action={logout}>
-          <button className="text-sm text-zinc-400 transition hover:text-zinc-100">Sign out</button>
-        </form>
-      </header>
+      <SiteHeader current="/" />
 
       {note && (
         <p
@@ -187,44 +170,26 @@ export default async function Home(props: PageProps<"/">) {
 
       <section className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="font-medium text-zinc-100">2. Discovered services</h2>
-        {totalServices === 0 ? (
+        {summary.total === 0 ? (
           <p className="mt-1 text-sm text-zinc-400">
             Nothing yet. Connect a mailbox and press Scan. Ghost-Hub reads message headers only (sender, subject and
             date), never message bodies, and doesn&apos;t keep subjects.
           </p>
         ) : (
-          <>
-            <p className="mt-1 text-sm text-zinc-400">{totalServices.toLocaleString("en-US")} services found across your mailboxes.</p>
-            <nav className="mt-3 flex flex-wrap gap-2 text-xs" aria-label="Filter by type">
-              <Link href="/" className={chip(!cat)}>All ({totalServices})</Link>
-              {CATEGORIES.map((c) => (
-                <Link key={c} href={`/?cat=${c}`} className={chip(cat === c)} title={CATEGORY_HINT[c]}>
-                  {CATEGORY_LABEL[c]} ({counts[c]})
-                </Link>
-              ))}
-            </nav>
-            <ul className="mt-3 divide-y divide-zinc-900">
-              {services.map((s) => (
-                <li key={s.domain} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm text-zinc-100">{s.name}</div>
-                    <div className="truncate text-xs text-zinc-500">{s.domain}</div>
-                  </div>
-                  <div className="shrink-0 text-right text-xs text-zinc-500">
-                    <div>
-                      <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
-                        {CATEGORY_SINGULAR[s.category]}
-                      </span>
-                    </div>
-                    <div className="mt-1">
-                      {s.messages.toLocaleString("en-US")} msgs, {s.firstSeen.getUTCFullYear()}
-                      {s.lastSeen.getUTCFullYear() !== s.firstSeen.getUTCFullYear() ? `-${s.lastSeen.getUTCFullYear()}` : ""}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-zinc-400">
+              {summary.total.toLocaleString("en-US")} services found
+              {summary.high + summary.medium > 0
+                ? `, ${(summary.high + summary.medium).toLocaleString("en-US")} worth a closer look.`
+                : "."}
+            </p>
+            <Link
+              href="/dashboard"
+              className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400"
+            >
+              Open dashboard
+            </Link>
+          </div>
         )}
       </section>
 
@@ -244,11 +209,6 @@ export default async function Home(props: PageProps<"/">) {
     </main>
   );
 }
-
-const chip = (active: boolean) =>
-  `rounded-full border px-2.5 py-1 transition ${
-    active ? "border-emerald-700 bg-emerald-950/50 text-emerald-300" : "border-zinc-800 text-zinc-400 hover:border-zinc-600"
-  }`;
 
 type LatestScan = Awaited<ReturnType<typeof latestScan>>;
 

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts, mailboxConnections, messagesSeen, newsletters, scans } from "@/db/schema";
+import { accounts, breachChecks, mailboxBreaches, mailboxConnections, messagesSeen, newsletters, scans } from "@/db/schema";
 import { decrypt, encrypt } from "./crypto";
 import { IMAP_PORT, type ImapCredentials } from "./imap";
 import { OAuthError, getOAuthProvider } from "./oauth";
@@ -137,6 +137,8 @@ export async function disconnectMailbox(mailbox: string, opts: { wipe: boolean }
       await tx.delete(newsletters).where(eq(newsletters.mailbox, mailbox));
       await tx.delete(messagesSeen).where(eq(messagesSeen.mailbox, mailbox));
       await tx.delete(scans).where(eq(scans.mailbox, mailbox));
+      await tx.delete(mailboxBreaches).where(eq(mailboxBreaches.mailbox, mailbox));
+      await tx.delete(breachChecks).where(eq(breachChecks.mailbox, mailbox));
     }
     await tx.delete(mailboxConnections).where(and(eq(mailboxConnections.id, row.id)));
   });

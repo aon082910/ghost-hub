@@ -47,7 +47,9 @@ published on GitHub so others can host their own.
    paged header-only fetch, domain→service grouping, resumable scan with progress, cancel and a results list.
    Verified end to end against fake Gmail and Graph mailboxes; the IMAP source is covered by unit tests with a
    fake client only. See "How scanning works" below.
-4. **Dashboard + risk** — accounts list, breach matching, risk score, filters.
+4. **Dashboard + risk** *(done)* — `/dashboard` with summary tiles, breach data panel, filters (type, risk, known
+   breach) and an expandable "why this score" per service. See "How risk scoring works" below. Verified end to
+   end against a fake HIBP; nothing has run against the real HIBP API from the app.
 5. **Newsletters** — `List-Unsubscribe` detection, review queue, bulk unsubscribe (one-click POST + mailto).
 6. **Shadow scanner** — site list, username/email/phone checks, rate limiting, results view.
 7. **Value recovery** — detect gift cards/coupons/rewards in receipts and promos.
@@ -73,12 +75,33 @@ published on GitHub so others can host their own.
 - **Newsletters:** `List-Unsubscribe` links and the one-click flag are recorded during the scan so the
   unsubscribe milestone needs no rescan. They're untrusted data from emails: validate before ever using them.
 
+## How risk scoring works
+
+`src/lib/breaches/risk.ts` is a pure function, so every number on the dashboard traces back to a list of factors.
+
+- **Baseline** by relationship: account 15, subscription 10, receipt 5, newsletter 0.
+- **Breaches** that name the service's registrable domain, from HIBP's public list (fabricated, spam-list, malware,
+  stealer-log, retired and domain-less entries are dropped). Each breach is worth its **severity**, set by the worst
+  data class leaked: credentials (passwords, hints, security questions, auth tokens) 50, financial 30, identity
+  (government IDs, DOB, address, phone...) 18, basic (email, username, IP...) 8. That is multiplied by:
+  - **exposure**: confirmed (the user's address is in it, via their HIBP key) 1.0; likely (the breach is within 30
+    days before, or any time after, the service first emailed the user) 0.8; before (it predates the account) 0.3;
+    date unknown 0.6;
+  - 0.5 if HIBP hasn't verified the breach, 0.5 if it was of a subdomain (`forums.example.com`) rather than the
+    site itself, and 0.5 for newsletters (usually no login).
+  The three worst breaches count, capped at 60 points together.
+- **Forgotten account**: +15 for an account or subscription with no email in over 2 years.
+- **Levels**: high 60+, medium 35+, low 15+, minimal below that. It's a rule of thumb for deciding what to look at
+  first, not a security verdict. Without an HIBP key, "likely" is an estimate from dates.
+
 ## Known gaps / backlog
 
 - No scan depth limit (e.g. "last 3 years"); a very large mailbox is scanned in full.
 - Scans run inside the web server process; they don't survive a restart (they resume on the next scan).
 - IMAP has never been run against a real server, only a fake client.
 - Services are listed per domain; related domains (amazon.com / amazon.co.uk) aren't merged.
+- Breaches are matched by domain only, so a service that changed domains, or HIBP entries without a domain, are missed.
+- The per-address HIBP check only covers connected mailboxes, not other addresses or phone numbers.
 
 ## Open questions
 

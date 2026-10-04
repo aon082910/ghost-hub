@@ -16,6 +16,8 @@ const schema = z.object({
   /** "common" accepts personal and work/school accounts; use "consumers" or a tenant id to narrow it. */
   MICROSOFT_TENANT: z.string().min(1).default("common"),
   HIBP_API_KEY: z.string().optional(),
+  /** Set to false to make no calls to Have I Been Pwned at all. */
+  HIBP_ENABLED: z.stringbool().default(true),
 });
 
 export type Env = z.infer<typeof schema>;

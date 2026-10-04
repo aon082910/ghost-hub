@@ -12,7 +12,8 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
    IMAP mailbox (app password). All read-only, any number of mailboxes.
 2. **Scan** — finds services from sign-up, welcome, verification and receipt emails; optionally searches the
    web for "shadow profiles" under your email, phone or username. Everything is checked against breach data.
-3. **Dashboard** — accounts grouped by service, risk-scored, with breach flags and newsletter detection.
+3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores
+   combine how you use the service, how long since it last emailed you, and known breaches of it.
 4. **Act** — deletion guides, review-first bulk newsletter unsubscribe. Nothing happens without your approval.
 
 ## Privacy model
@@ -24,6 +25,19 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
   id per scanned message so a rescan can skip it.
 - OAuth refresh tokens and IMAP app passwords are encrypted at rest (AES-256-GCM).
 - You can disconnect and wipe all data from the UI at any time.
+
+## What leaves your server
+
+Ghost-Hub talks only to the services you connect, plus (optionally) Have I Been Pwned:
+
+| To | When | What is sent |
+|----|------|--------------|
+| Google, Microsoft, or your IMAP server | Connecting and scanning | Your login and requests for message headers |
+| Have I Been Pwned, public breach list | Press **Refresh breach list**, or after a scan if the list is over a week old | Nothing about you: it's a plain download |
+| Have I Been Pwned, address lookup | Press **Check** on the dashboard, and only if you set `HIBP_API_KEY` | That one email address and your key |
+
+Set `HIBP_ENABLED=false` to turn off every Have I Been Pwned call. Breach checks then don't run and scores use
+only how you use each service.
 
 ## Quick start (Docker)
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { scans } from "@/db/schema";
+import { ensureFreshCatalog } from "../breaches/store";
 import { describeScanError, runScan } from "./engine";
 import { createSource } from "./sources";
 
@@ -33,7 +34,9 @@ export async function startScan(mailbox: string): Promise<{ scanId: string; alre
   void (async () => {
     try {
       const source = await createSource(mailbox);
-      await runScan({ scanId: entry.scanId, mailbox, source, signal: entry.controller.signal });
+      const outcome = await runScan({ scanId: entry.scanId, mailbox, source, signal: entry.controller.signal });
+      // New services were just found, so make sure there's a recent breach list to score them against.
+      if (outcome === "done") void ensureFreshCatalog();
     } catch (err) {
       // createSource failed (e.g. credential can't be decrypted); runScan handles its own failures.
       await getDb()
