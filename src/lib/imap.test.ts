@@ -75,6 +75,24 @@ describe("verifyImapLogin", () => {
     await expect(verifyImapLogin(creds, () => client)).rejects.toMatchObject({ code: "unreachable" });
   });
 
+  it("reports an untrusted certificate as that, not as an unreachable server", async () => {
+    for (const code of ["SELF_SIGNED_CERT_IN_CHAIN", "DEPTH_ZERO_SELF_SIGNED_CERT", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "CERT_HAS_EXPIRED", "ERR_TLS_CERT_ALTNAME_INVALID"]) {
+      const client = fakeClient({ connect: vi.fn().mockRejectedValue(Object.assign(new Error("tls"), { code })) });
+      const caught = await verifyImapLogin(creds, () => client).catch((e) => e);
+      expect(caught, code).toMatchObject({ name: "ImapConnectError", code: "untrusted_certificate" });
+      expect(caught.message).toMatch(/certificate/i);
+      expect(caught.message).not.toContain(creds.pass);
+      expect(client.close).toHaveBeenCalled();
+    }
+  });
+
+  it("still treats other connection codes as unreachable", async () => {
+    for (const code of ["ENOTFOUND", "ECONNREFUSED", "ETIMEDOUT", undefined]) {
+      const client = fakeClient({ connect: vi.fn().mockRejectedValue(Object.assign(new Error("net"), { code })) });
+      await expect(verifyImapLogin(creds, () => client), String(code)).rejects.toMatchObject({ code: "unreachable" });
+    }
+  });
+
   it("never puts the password in an error message", async () => {
     for (const err of [Object.assign(new Error(creds.pass), { authenticationFailed: true }), new Error(creds.pass)]) {
       const client = fakeClient({ connect: vi.fn().mockRejectedValue(err) });

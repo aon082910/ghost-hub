@@ -2,6 +2,7 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, messagesSeen, newsletters, scans } from "@/db/schema";
 import { OAuthError } from "../oauth";
+import { CERTIFICATE_HELP, isCertificateError } from "../tls-errors";
 import { CATEGORY_RANK, classify, serviceName, type Category } from "./classify";
 import type { MailSource, MessageHeader } from "./types";
 
@@ -159,6 +160,7 @@ export function describeScanError(err: unknown): string {
   const e = err as { authenticationFailed?: boolean; code?: string; name?: string; message?: string };
   if (e?.name === "TimeoutError") return "The mail server took too long to respond. Try again; scanning continues where it stopped.";
   if (e?.authenticationFailed) return "The mail server rejected the saved login. Reconnect this mailbox with a new app password.";
+  if (isCertificateError(e?.code)) return CERTIFICATE_HELP;
   if (e?.code && /^(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT)$/.test(e.code)) return "Couldn't reach the mail server. Try again in a moment.";
   const msg = e?.message ?? "Unknown error";
   // AES-GCM refusing to open stored credentials means ENCRYPTION_KEY isn't the one they were saved with.

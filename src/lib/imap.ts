@@ -1,5 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { z } from "zod";
+import { CERTIFICATE_HELP, isCertificateError } from "./tls-errors";
 
 export type ImapPreset = {
   id: string;
@@ -54,7 +55,7 @@ export function parseImapForm(raw: Record<string, FormDataEntryValue | null>):
 
 export class ImapConnectError extends Error {
   constructor(
-    public readonly code: "auth_failed" | "unreachable",
+    public readonly code: "auth_failed" | "unreachable" | "untrusted_certificate",
     message: string,
   ) {
     super(message);
@@ -97,7 +98,8 @@ export async function verifyImapLogin(
     return { messages: status ? (status.messages ?? null) : null };
   } catch (err) {
     client.close();
-    const e = err as { authenticationFailed?: boolean; responseText?: string; message?: string };
+    const e = err as { authenticationFailed?: boolean; responseText?: string; message?: string; code?: string };
+    if (isCertificateError(e.code)) throw new ImapConnectError("untrusted_certificate", CERTIFICATE_HELP);
     if (e.authenticationFailed) {
       throw new ImapConnectError(
         "auth_failed",
