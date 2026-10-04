@@ -15,6 +15,8 @@ First pre-release. Built and tested against fake provider servers; not yet run a
 - **Inbox scan**: header-only scan of Gmail, Microsoft Graph and IMAP, resumable and cancellable, with live progress.
   Finds services from sign-up, receipt, subscription and newsletter mail. A first scan of a very large mailbox can be
   limited to the last 5 years, 2 years, year or 90 days; the dashboard says when it's working from a partial scan.
+  Spam, Trash, Sent and Drafts are skipped by default; an option includes them (useful for an old mailbox you plan to
+  close, where sign-ups may have been deleted or filed as spam).
 - **Dashboard**: every service with a 0-100 risk score and a plain explanation, breach matching against Have I Been
   Pwned's public list (optional per-address check with your own key), filters, and a "forgotten account" signal.
   A company that emails from several domains (amazon.com, amazon.co.uk...) is one row, merged only where the

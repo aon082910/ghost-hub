@@ -31,16 +31,17 @@ const SKIPPED_SPECIAL_USE = new Set(["\\Junk", "\\Trash", "\\Sent", "\\Drafts"])
 // Not every server sets special-use flags (Yahoo's spam folder is "Bulk"), so fall back to the name.
 const SKIPPED_NAME = /^(?:spam|junk|bulk(?: mail)?|trash|deleted(?: items| messages)?|sent(?: items| mail| messages)?|drafts?)$/i;
 
-export const isSkippedFolder = (f: { path: string; specialUse?: string; flags?: Set<string> }) =>
-  (f.specialUse !== undefined && SKIPPED_SPECIAL_USE.has(f.specialUse)) ||
+/** Folders that can't be opened are always skipped. Spam, Trash, Sent and Drafts are skipped unless `includeJunk`. */
+export const isSkippedFolder = (f: { path: string; specialUse?: string; flags?: Set<string> }, includeJunk = false) =>
   f.flags?.has("\\Noselect") === true ||
   f.flags?.has("\\NonExistent") === true ||
-  SKIPPED_NAME.test(f.path.split(/[/.]/).pop() ?? f.path);
+  (!includeJunk &&
+    ((f.specialUse !== undefined && SKIPPED_SPECIAL_USE.has(f.specialUse)) || SKIPPED_NAME.test(f.path.split(/[/.]/).pop() ?? f.path)));
 
 /** Reads message headers over IMAP, one folder at a time, newest first. Bodies are never requested. */
 export class ImapSource implements MailSource {
   private connected = false;
-  private folders: Promise<{ path: string }[]> | null = null;
+  private readonly folders = new Map<boolean, Promise<{ path: string }[]>>();
 
   constructor(private readonly client: ImapScanClient) {}
 
@@ -51,17 +52,21 @@ export class ImapSource implements MailSource {
     }
   }
 
-  private listFolders() {
-    this.folders ??= (async () => {
-      await this.ensureConnected();
-      return (await this.client.list()).filter((f) => !isSkippedFolder(f));
-    })();
-    return this.folders;
+  private listFolders(includeJunk: boolean) {
+    let pending = this.folders.get(includeJunk);
+    if (!pending) {
+      pending = (async () => {
+        await this.ensureConnected();
+        return (await this.client.list()).filter((f) => !isSkippedFolder(f, includeJunk));
+      })();
+      this.folders.set(includeJunk, pending);
+    }
+    return pending;
   }
 
-  async total(since?: Date): Promise<number | null> {
+  async total(since?: Date, includeJunk = false): Promise<number | null> {
     let sum = 0;
-    for (const f of await this.listFolders()) {
+    for (const f of await this.listFolders(includeJunk)) {
       if (since) {
         const lock = await this.client.getMailboxLock(f.path);
         try {
@@ -77,8 +82,8 @@ export class ImapSource implements MailSource {
     return sum;
   }
 
-  async *pages({ skip, signal, since }: PagesOptions): AsyncIterable<MessageHeader[]> {
-    for (const folder of await this.listFolders()) {
+  async *pages({ skip, signal, since, includeJunk = false }: PagesOptions): AsyncIterable<MessageHeader[]> {
+    for (const folder of await this.listFolders(includeJunk)) {
       signal?.throwIfAborted();
       const lock = await this.client.getMailboxLock(folder.path);
       try {

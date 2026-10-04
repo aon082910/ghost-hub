@@ -55,7 +55,7 @@ export async function scanMailbox(formData: FormData) {
   const mailbox = formData.get("mailbox");
   if (typeof mailbox !== "string" || !(await findConnection(mailbox))) redirect("/");
   const depth = formData.get("depth");
-  await startScan(mailbox, { since: isDepth(depth) ? sinceFor(depth) : undefined });
+  await startScan(mailbox, { since: isDepth(depth) ? sinceFor(depth) : undefined, includeJunk: formData.get("includeJunk") === "on" });
   redirect("/");
 }
 

@@ -16,7 +16,7 @@ const running = () => (g.__ghostHubScans ??= new Map());
  * Start a scan in the background and return immediately. If this mailbox is already being scanned,
  * returns the running scan instead of starting a second one.
  */
-export async function startScan(mailbox: string, opts: { since?: Date } = {}): Promise<{ scanId: string; alreadyRunning: boolean }> {
+export async function startScan(mailbox: string, opts: { since?: Date; includeJunk?: boolean } = {}): Promise<{ scanId: string; alreadyRunning: boolean }> {
   const existing = running().get(mailbox);
   if (existing) return { scanId: existing.scanId, alreadyRunning: true };
 
@@ -25,7 +25,7 @@ export async function startScan(mailbox: string, opts: { since?: Date } = {}): P
   running().set(mailbox, entry);
 
   try {
-    await getDb().insert(scans).values({ id: entry.scanId, mailbox, since: opts.since ?? null });
+    await getDb().insert(scans).values({ id: entry.scanId, mailbox, since: opts.since ?? null, includeJunk: opts.includeJunk ?? false });
   } catch (err) {
     running().delete(mailbox);
     throw err;
@@ -34,7 +34,7 @@ export async function startScan(mailbox: string, opts: { since?: Date } = {}): P
   void (async () => {
     try {
       const source = await createSource(mailbox);
-      const outcome = await runScan({ scanId: entry.scanId, mailbox, source, signal: entry.controller.signal, since: opts.since });
+      const outcome = await runScan({ scanId: entry.scanId, mailbox, source, signal: entry.controller.signal, since: opts.since, includeJunk: opts.includeJunk });
       // New services were just found, so make sure there's a recent breach list to score them against.
       if (outcome === "done") void ensureFreshCatalog();
     } catch (err) {

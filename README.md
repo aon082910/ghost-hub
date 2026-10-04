@@ -15,7 +15,8 @@ breached, and clean up, on your own hardware with your own credentials. Your ema
 1. **Connect** — Gmail (Google OAuth), Outlook / Microsoft 365 (Microsoft OAuth) and Yahoo, AOL, iCloud or any
    IMAP mailbox (app password). All read-only, any number of mailboxes.
 2. **Scan** — finds the services you've signed up for from sign-up, welcome, verification and receipt emails (message
-   headers only). A first scan of a huge mailbox can be limited to recent mail and widened later. It can also look
+   headers only). A first scan of a huge mailbox can be limited to recent mail and widened later. Spam, Trash, Sent and
+   Drafts are skipped unless you tick **Include spam, trash & sent**, which suits an old mailbox you're closing. It can also look
    for public profiles under your own usernames, and the accounts linked to your own email addresses (see
    [Profiles](#profiles)).
 3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores combine how

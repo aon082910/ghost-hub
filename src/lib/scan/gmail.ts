@@ -11,6 +11,8 @@ const YIELD_EVERY = 100;
 // Sent mail and drafts are the user talking, not services talking to the user. Spam and trash are
 // excluded by Gmail's list endpoint unless asked for.
 const QUERY = "-in:sent -in:drafts -in:chats";
+// With "include spam, trash and sent": only chats stay out. Spam and Trash also need `includeSpamTrash` on the request.
+const QUERY_WITH_JUNK = "-in:chats";
 
 export type GmailSourceOptions = HttpDeps & {
   getToken: () => Promise<string>;
@@ -41,12 +43,14 @@ export class GmailSource implements MailSource {
     return p?.messagesTotal ?? null;
   }
 
-  async *pages({ skip, signal, since }: PagesOptions): AsyncIterable<MessageHeader[]> {
+  async *pages({ skip, signal, since, includeJunk }: PagesOptions): AsyncIterable<MessageHeader[]> {
     let pageToken: string | undefined;
+    const base = includeJunk ? QUERY_WITH_JUNK : QUERY;
     // Gmail's `after:` accepts epoch seconds, which avoids any time-zone guessing.
-    const query = since ? `${QUERY} after:${Math.floor(since.getTime() / 1000)}` : QUERY;
+    const query = since ? `${base} after:${Math.floor(since.getTime() / 1000)}` : base;
     do {
       const params = new URLSearchParams({ maxResults: String(PAGE_SIZE), q: query });
+      if (includeJunk) params.set("includeSpamTrash", "true");
       if (pageToken) params.set("pageToken", pageToken);
       const list = (await this.get<GmailList>(`/users/me/messages?${params}`, signal))!;
 

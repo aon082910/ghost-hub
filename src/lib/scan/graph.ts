@@ -79,8 +79,8 @@ export class GraphSource implements MailSource {
     return this.skippedFolderIds;
   }
 
-  async *pages({ skip, signal, since }: PagesOptions): AsyncIterable<MessageHeader[]> {
-    const skipFolders = await this.loadSkippedFolders(signal);
+  async *pages({ skip, signal, since, includeJunk }: PagesOptions): AsyncIterable<MessageHeader[]> {
+    const skipFolders = includeJunk ? new Set<string>() : await this.loadSkippedFolders(signal);
     const select = "id,receivedDateTime,from,subject,parentFolderId,internetMessageHeaders";
     // Graph requires the filtered property to lead the $orderby, which it already does.
     const filter = since ? `&$filter=${encodeURIComponent(`receivedDateTime ge ${since.toISOString()}`)}` : "";

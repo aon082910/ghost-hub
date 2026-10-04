@@ -82,6 +82,11 @@ published on GitHub so others can host their own.
   can make a breach look like it predates the account and lower its score, so the dashboard shows a notice for any
   mailbox that has only limited or unfinished scans (`src/lib/scan/coverage.ts`). The progress total is "unknown" when
   the source can't count a window cheaply (Gmail).
+- **Junk folders:** Spam/Junk/Bulk, Trash/Deleted, Sent and Drafts are skipped by default, because they hold spam
+  senders rather than services you signed up for. The "Include spam, trash & sent" option (`scans.include_junk`) reads
+  them too: IMAP lists every selectable folder, Gmail adds `includeSpamTrash=true` and drops `-in:sent -in:drafts`, Graph
+  stops filtering by folder. Mail from your own address is never counted as a service, so Sent adds nothing by itself.
+  Expect extra one-off senders from spam; they are mostly category "newsletter" with one message.
 - **Exactness:** each page of results and its "seen" ids are saved in one transaction, so a crash, cancel or
   restart can never double count or lose a message, and scanning again continues where it stopped. Scans left
   "running" by a restart are marked failed on startup. One scan runs per mailbox at a time.

@@ -256,7 +256,7 @@ function ScanStatus({ mailbox, scan }: { mailbox: string; scan: LatestScan }) {
   const summary = !scan
     ? "Not scanned yet."
     : scan.status === "done"
-      ? `Scanned ${scan.messagesProcessed.toLocaleString("en-US")} messages${reach}, ${when}.`
+      ? `Scanned ${scan.messagesProcessed.toLocaleString("en-US")} messages${reach}${scan.includeJunk ? " (including spam, trash and sent)" : ""}, ${when}.`
       : scan.status === "cancelled"
         ? `Scan cancelled after ${scan.messagesProcessed.toLocaleString("en-US")} messages. Scanning again continues where it stopped.`
         : null;
@@ -281,6 +281,13 @@ function ScanStatus({ mailbox, scan }: { mailbox: string; scan: LatestScan }) {
             </option>
           ))}
         </select>
+        <label
+          className="flex items-center gap-1 text-xs text-zinc-400"
+          title="Also read the Spam, Trash, Sent and Drafts folders, which are normally skipped. Useful for an old mailbox: it finds sign-ups that were deleted or filed as spam."
+        >
+          <input type="checkbox" name="includeJunk" className="accent-emerald-500" />
+          Include spam, trash &amp; sent
+        </label>
         <button className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400">
           {scan ? "Scan again" : "Scan"}
         </button>

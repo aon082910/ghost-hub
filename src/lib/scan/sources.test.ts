@@ -131,6 +131,18 @@ describe("GmailSource", () => {
     expect(new Set(f.auth)).toEqual(new Set(["Bearer tok"]));
   });
 
+  it("with includeJunk it asks for spam and trash and stops excluding sent and drafts", async () => {
+    const f = fakeGmail({ a: message("a", { From: "a@a.com" }) }, [["a"]]);
+    await collect(make(f).pages({ ...noSkip, includeJunk: true, since: new Date("2024-01-01T00:00:00Z") }));
+    const listUrl = new URL(f.urls.find((u) => u.includes("/messages?"))!);
+    expect(listUrl.searchParams.get("includeSpamTrash")).toBe("true");
+    expect(listUrl.searchParams.get("q")).toBe(`-in:chats after:${Math.floor(Date.UTC(2024, 0, 1) / 1000)}`);
+
+    const plain = fakeGmail({ a: message("a", { From: "a@a.com" }) }, [["a"]]);
+    await collect(make(plain).pages(noSkip));
+    expect(new URL(plain.urls.find((u) => u.includes("/messages?"))!).searchParams.has("includeSpamTrash")).toBe(false);
+  });
+
   it("doesn't fetch skipped messages and tolerates ones deleted mid-scan", async () => {
     const f = fakeGmail({ a: message("a", { From: "a@a.com" }), b: null, c: message("c", { From: "c@c.com" }) }, [["a", "b", "c"]]);
     const pages = (await collect(make(f).pages({ skip: (id) => id === "a" }))).flat();
@@ -208,6 +220,13 @@ describe("GraphSource", () => {
     expect(first.headers.get("authorization")).toBe("Bearer tok");
     expect(decodeURIComponent(first.url)).toContain("$select=id,receivedDateTime,from,subject,parentFolderId,internetMessageHeaders");
     expect(decodeURIComponent(first.url)).not.toMatch(/body/i); // no bodies
+  });
+
+  it("with includeJunk it keeps Junk, Deleted and Sent mail and never looks the folders up", async () => {
+    const f = fakeGraph([{ value: [gm("1", "inbox"), gm("2", "F-junk"), gm("3", "F-sent"), gm("4", "F-del")] }]);
+    const msgs = (await collect(make(f).pages({ ...noSkip, includeJunk: true }))).flat();
+    expect(msgs.map((m) => m.id)).toEqual(["1", "2", "3", "4"]);
+    expect(f.calls.some((c) => /mailFolders/.test(c.url))).toBe(false);
   });
 
   it("skips known ids", async () => {
@@ -290,6 +309,24 @@ describe("ImapSource", () => {
     expect(isSkippedFolder({ path: "Work/Sent" })).toBe(true);
     expect(isSkippedFolder({ path: "Receipts" })).toBe(false);
     expect(isSkippedFolder({ path: "Sentinel" })).toBe(false); // a name merely starting with "sent"
+  });
+
+  it("with includeJunk reads Spam, Trash, Sent and Drafts too, but never a folder that can't be opened", async () => {
+    expect(FOLDERS.filter((f) => !isSkippedFolder(f, true)).map((f) => f.path)).toEqual(["INBOX", "Archive", "Junk", "Trash", "Sent Items", "Draft", "Bulk"]);
+    expect(isSkippedFolder({ path: "[Gmail]", flags: new Set(["\\Noselect"]) }, true)).toBe(true);
+    expect(isSkippedFolder({ path: "Gone", flags: new Set(["\\NonExistent"]) }, true)).toBe(true);
+  });
+
+  it("includeJunk applies to the total and the pages, and the two folder lists don't leak into each other", async () => {
+    const uids = { INBOX: [1, 2], Archive: [10], Junk: [1, 2, 3], Trash: [5], "Sent Items": [7], Draft: [], Bulk: [9] };
+    const { client, state } = fakeClient(FOLDERS, uids);
+    const src = new ImapSource(client);
+    expect(await src.total(undefined, false)).toBe(3);
+    const full = (await collect(src.pages({ ...noSkip, includeJunk: true }))).flat();
+    expect(full.length).toBe(2 + 1 + 3 + 1 + 1 + 0 + 1);
+    const plain = (await collect(src.pages(noSkip))).flat();
+    expect(plain.length).toBe(3);
+    expect(state.locked.slice(0, 7)).toEqual(["INBOX", "Archive", "Junk", "Trash", "Sent Items", "Draft", "Bulk"]);
   });
 
   it("scans the remaining folders newest-first, with ids that include the folder and uidValidity", async () => {

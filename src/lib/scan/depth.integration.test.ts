@@ -12,12 +12,16 @@ class WindowedSource implements MailSource {
   totalSince: Date | undefined | "unset" = "unset";
   pagesSince: Date | undefined | "unset" = "unset";
   constructor(private readonly all: MessageHeader[]) {}
-  async total(since?: Date) {
+  includeJunkSeen: boolean | undefined | "unset" = "unset";
+  async total(since?: Date, includeJunk?: boolean) {
     this.totalSince = since;
+    this.includeJunkSeen = includeJunk;
     return this.all.filter((m) => !since || m.date >= since).length;
   }
-  async *pages({ skip, since }: PagesOptions) {
+  pagesIncludeJunk: boolean | undefined | "unset" = "unset";
+  async *pages({ skip, since, includeJunk }: PagesOptions) {
     this.pagesSince = since;
+    this.pagesIncludeJunk = includeJunk;
     const wanted = this.all.filter((m) => (!since || m.date >= since) && !skip(m.id));
     if (wanted.length) yield wanted;
   }
@@ -54,9 +58,9 @@ describe.skipIf(!url)("limited-depth scans (integration)", () => {
   const ALL = [msg("old1", "2019-03-01"), msg("old2", "2021-05-05"), msg("new1", "2025-09-09"), msg("new2", "2026-02-02")];
   const SINCE = new Date("2024-01-01T00:00:00Z");
 
-  async function scan(source: MailSource, since?: Date) {
-    const [row] = await db.insert(schema.scans).values({ mailbox: ME, since: since ?? null }).returning({ id: schema.scans.id });
-    const outcome = await engine.runScan({ scanId: row.id, mailbox: ME, source, since });
+  async function scan(source: MailSource, since?: Date, includeJunk?: boolean) {
+    const [row] = await db.insert(schema.scans).values({ mailbox: ME, since: since ?? null, includeJunk: includeJunk ?? false }).returning({ id: schema.scans.id });
+    const outcome = await engine.runScan({ scanId: row.id, mailbox: ME, source, since, includeJunk });
     return { id: row.id, outcome };
   }
   const shop = async () => (await db.select().from(schema.accounts).where(eq(schema.accounts.domain, "shop.com")))[0];
@@ -69,6 +73,20 @@ describe.skipIf(!url)("limited-depth scans (integration)", () => {
     expect(source.pagesSince).toEqual(SINCE);
     const [row] = await db.select().from(schema.scans).where(eq(schema.scans.id, id));
     expect(row).toMatchObject({ since: SINCE, messagesTotal: 2, messagesProcessed: 2, status: "done" });
+  });
+
+  it("hands includeJunk to the source for both the estimate and the pages, and records it on the scan", async () => {
+    const source = new WindowedSource(ALL);
+    const { id } = await scan(source, undefined, true);
+    expect(source.includeJunkSeen).toBe(true);
+    expect(source.pagesIncludeJunk).toBe(true);
+    const [row] = await db.select().from(schema.scans).where(eq(schema.scans.id, id));
+    expect(row.includeJunk).toBe(true);
+
+    const plain = new WindowedSource(ALL);
+    const { id: id2 } = await scan(plain);
+    expect(plain.pagesIncludeJunk).toBeFalsy();
+    expect((await db.select().from(schema.scans).where(eq(schema.scans.id, id2)))[0].includeJunk).toBe(false);
   });
 
   it("a full scan passes no date", async () => {

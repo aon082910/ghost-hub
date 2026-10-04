@@ -1,0 +1,1 @@
+ALTER TABLE "scans" ADD COLUMN "include_junk" boolean DEFAULT false NOT NULL;
