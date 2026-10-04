@@ -53,7 +53,10 @@ published on GitHub so others can host their own.
 5. **Newsletters** *(done)* — `/newsletters` lists senders found by scans, a review page shows exactly where each
    request goes, and approving sends RFC 8058 one-click POSTs. Everything else is done by hand with a link or
    address. Verified end to end over real TLS against a fake sender. See "How unsubscribing works".
-6. **Shadow scanner** — site list, username/email/phone checks, rate limiting, results view.
+6. **Profiles** *(done)* — `/profiles`: public-profile lookups for the user's own usernames and Gravatar lookups for
+   connected addresses. Scoped down on purpose, see "How profile checks work". Verified end to end over real TLS
+   against a fake set of sites, and the bundled list against the real internet (30 of 31 candidate sites passed; the
+   one that blocks automated requests was dropped).
 7. **Value recovery** — detect gift cards/coupons/rewards in receipts and promos.
 8. **Polish** — deletion guides, Unraid Community Apps template, release docs.
 
@@ -117,8 +120,33 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
   Links that fail these checks are withheld in the list: not requested, not offered to open.
 - **After**: the sender is marked unsubscribed with a timestamp. If mail keeps arriving more than 3 days later (seen
   on the next scan) it is flagged "still sending". Failures can be retried.
-- **Development only**: `GHOSTHUB_ALLOW_PRIVATE_UNSUBSCRIBE=1` lets a local fake sender be used. It is ignored in
+- **Development only**: `GHOSTHUB_ALLOW_PRIVATE_TARGETS=1` lets a local fake sender be used. It is ignored in
   production builds.
+
+## How profile checks work
+
+- **What it is**: for each username the user added, GET the public profile page on each site in `sites.json` and decide
+  from the status code (and sometimes a marker in the body) whether the profile exists. For each connected address,
+  ask Gravatar's public API by SHA-256 hash (no key, 100 requests an hour), which returns a profile and the accounts
+  its owner linked. Results are stored in `shadow_profiles`; usernames in `profile_identifiers`.
+- **What it deliberately isn't**: no probing of sign-up or reset forms (fragile, against many sites' terms, can send
+  the user email), no phone lookups (no safe public source), no logins, and no looking up people who aren't the user.
+- **Only the user's own identifiers**: addresses must belong to a connected mailbox (ownership proven by OAuth or IMAP
+  login); usernames need an explicit confirmation, are capped at 10, and an identifier checked in the last 10 minutes
+  is skipped. One job runs at a time, 4 requests at once, one request per site per username.
+- **A site is only listed if it can be told apart honestly**: it must answer differently for a name that exists and one
+  that doesn't, without a login, JavaScript or beating bot protection. Sites that block automated requests (Reddit,
+  Medium, npm, Letterboxd, Last.fm...) or answer the same either way (Telegram, Ko-fi, PyPI) are left out. A 403, 429 or
+  an unexpected body is "can't tell" and is shown with its reason, never guessed.
+- **A flaky site can't erase a real answer**: a failed check never overwrites an earlier found or not-found result.
+- **Network rules** (same guard as unsubscribe): https only, public hostnames, address checked at connect time, 10 s
+  timeout, at most 64 KB of each page read, only same-host redirects followed (re-validated each hop), an honest
+  User-Agent, no cookies. Links shown on screen must be plain https.
+- **Keeping the list honest**: every site carries a well-known `known` account; `sites.live.test.ts` (opt in with
+  `LIVE_SITES=1`) checks that it's found and an invented name isn't. A unit test makes sure each `known` name and the
+  invented one satisfy that site's own username rules.
+- **Development only**: `GHOSTHUB_PROFILE_SITES_FILE` (a different site list) and `GRAVATAR_API_URL` let a local fake be
+  used. They're ignored in production builds, like `GHOSTHUB_ALLOW_PRIVATE_TARGETS`.
 
 ## Gotchas
 
@@ -134,6 +162,10 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
 - Breaches are matched by domain only, so a service that changed domains, or HIBP entries without a domain, are missed.
 - The per-address HIBP check only covers connected mailboxes, not other addresses or phone numbers.
 - Senders that offer only a web link or `mailto:` are never automated, by design.
+- Profile checks cover ~30 sites. Big social networks (X, Instagram, Facebook, TikTok, LinkedIn, Reddit) aren't included
+  because they block automated requests or show a page that doesn't reveal whether a profile exists.
+- Usernames are stored lowercase, so sites that treat case as significant may give a different answer for the original.
+- A "found" profile only means a page exists under that name; it may belong to someone else, and the page says so.
 - Unsubscribing isn't verified beyond the HTTP status and whether mail keeps arriving; the sender's page isn't read.
 - The real HTTPS transport has only been run against a local fake with a self-signed certificate, not a real sender.
 

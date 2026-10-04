@@ -7,6 +7,8 @@ import { disconnectMailbox, findConnection, saveConnection } from "@/lib/mailbox
 import { HibpError } from "@/lib/breaches/hibp";
 import { HibpDisabledError, HibpKeyMissingError, checkMailboxBreaches, refreshCatalog } from "@/lib/breaches/store";
 import { approvePending, markUnsubscribedManually, queueUnsubscribes, rejectPending, setKept } from "@/lib/newsletters/store";
+import { cancelProfileScan, startProfileScan } from "@/lib/profiles/runner";
+import { addUsername, removeUsername } from "@/lib/profiles/store";
 import { cancelScan, startScan } from "@/lib/scan/registry";
 
 export type ConnectImapState = { error?: string };
@@ -152,4 +154,33 @@ export async function keepSender(newsletterId: string, kept: boolean) {
   await requireSession();
   if (UUID.test(newsletterId)) await setKept(newsletterId, kept);
   redirect("/newsletters");
+}
+
+/** Add a username the user says is theirs. They must tick the confirmation: this is for their own handles only. */
+export async function addProfileUsername(formData: FormData) {
+  await requireSession();
+  if (formData.get("confirm") !== "yes") redirect("/profiles?error=confirm");
+  const raw = formData.get("username");
+  const result = typeof raw === "string" ? await addUsername(raw) : ({ ok: false, code: "invalid" } as const);
+  if (!result.ok) redirect(`/profiles?error=${result.code}`);
+  redirect(`/profiles?added=${encodeURIComponent(result.value)}`);
+}
+
+export async function removeProfileUsername(id: string) {
+  await requireSession();
+  if (UUID.test(id)) await removeUsername(id);
+  redirect("/profiles?removed=1");
+}
+
+/** Check every identifier that is due. Runs in the background; the page shows progress. */
+export async function checkProfiles() {
+  await requireSession();
+  const r = await startProfileScan();
+  redirect(r.started ? `/profiles?started=${r.total}` : `/profiles?info=${r.reason}`);
+}
+
+export async function cancelProfileCheck() {
+  await requireSession();
+  cancelProfileScan();
+  redirect("/profiles");
 }

@@ -10,10 +10,11 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
 
 1. **Connect** — Gmail (Google OAuth), Outlook / Microsoft 365 (Microsoft OAuth) and Yahoo, AOL, iCloud or any
    IMAP mailbox (app password). All read-only, any number of mailboxes.
-2. **Scan** — finds services from sign-up, welcome, verification and receipt emails; optionally searches the
-   web for "shadow profiles" under your email, phone or username. Everything is checked against breach data.
-3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores
-   combine how you use the service, how long since it last emailed you, and known breaches of it.
+2. **Scan** — finds the services you've signed up for from sign-up, welcome, verification and receipt emails (message
+   headers only). It can also look for public profiles under your own usernames, and the accounts linked to your own
+   email addresses (see "Profiles" below).
+3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores combine how
+   you use the service, how long since it last emailed you, and known breaches of it (Have I Been Pwned's public list).
 4. **Act** — review-first bulk newsletter unsubscribe (deletion guides are planned). Nothing happens without your
    approval.
 
@@ -37,6 +38,8 @@ Ghost-Hub talks only to the services you connect, plus (optionally) Have I Been 
 | Have I Been Pwned, public breach list | Press **Refresh breach list**, or after a scan if the list is over a week old | Nothing about you: it's a plain download |
 | Have I Been Pwned, address lookup | Press **Check** on the dashboard, and only if you set `HIBP_API_KEY` | That one email address and your key |
 | A newsletter sender's unsubscribe address | Only after you review and approve it | One HTTPS POST (`List-Unsubscribe=One-Click`), no cookies or login |
+| ~30 public profile sites (GitHub, Codeberg, Bluesky...) | Press **Check now** on the Profiles page | One GET of the public profile page for each username you added; no login, nothing else about you |
+| Gravatar | Press **Check now** on the Profiles page | A SHA-256 hash of each connected address, never the address |
 
 Set `HIBP_ENABLED=false` to turn off every Have I Been Pwned call. Breach checks then don't run and scores use
 only how you use each service.
@@ -76,6 +79,19 @@ database and set `TEST_DATABASE_URL` to it before `npm test` (they're skipped ot
 ## Stack
 
 Next.js (App Router) · TypeScript · Tailwind CSS · PostgreSQL (Drizzle ORM) · Docker
+
+## Profiles
+
+The Profiles page answers "what's out there under my name?" without logging in anywhere.
+
+- **Usernames you add** are looked up by opening each site's public profile page, the same request a browser makes.
+  Each username needs a tick to confirm it's yours, you can add up to 10, and one checked in the last 10 minutes is skipped.
+- **Your connected email addresses** are looked up on Gravatar by hash, which also lists accounts their owner linked.
+- It deliberately does **not** probe sign-up or password-reset forms to see whether an address has an account (fragile,
+  against many sites' terms, and it can trigger emails), look up phone numbers (there's no safe public way), or
+  look up anyone else. Your inbox scan already finds the accounts you actually signed up for.
+- The site list is plain data in `src/lib/profiles/sites.json`. Sites change, so `LIVE_SITES=1 npx vitest run
+  src/lib/profiles/sites.live.test.ts` checks each entry against the real site. Fixes and new sites are welcome.
 
 ## Disclaimer
 

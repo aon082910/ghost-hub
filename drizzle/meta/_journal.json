@@ -43,6 +43,13 @@
       "when": 1791121498132,
       "tag": "0005_tricky_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791131225240,
+      "tag": "0006_soft_miek",
+      "breakpoints": true
     }
   ]
 }

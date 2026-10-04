@@ -94,16 +94,33 @@ export const newsletters = pgTable(
   (t) => [unique("newsletters_mailbox_sender").on(t.mailbox, t.senderEmail)],
 );
 
-/** Profiles found for the user's own email / phone / username. */
+/**
+ * Usernames the user has said are their own, to look up on public profile pages. Email addresses are not stored here:
+ * only addresses of connected mailboxes (which the user has proven they control) are ever looked up.
+ */
+export const profileIdentifiers = pgTable(
+  "profile_identifiers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(), // username
+    value: text("value").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [unique("profile_identifiers_unique").on(t.type, t.value)],
+);
+
+/** Results of looking an identifier up on public sites. Never contains anything but public profile facts. */
 export const shadowProfiles = pgTable(
   "shadow_profiles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    identifierType: text("identifier_type").notNull(), // email | phone | username
+    identifierType: text("identifier_type").notNull(), // email | username
     identifier: text("identifier").notNull(),
     site: text("site").notNull(),
     url: text("url"),
     status: text("status").notNull(), // found | not_found | error
+    /** Why a check couldn't tell (blocked, rate limited...), or a label for linked accounts. */
+    detail: text("detail"),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique("shadow_profiles_unique").on(t.identifierType, t.identifier, t.site)],

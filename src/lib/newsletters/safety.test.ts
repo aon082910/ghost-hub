@@ -85,14 +85,14 @@ describe("assertSafeUrl", () => {
   });
 
   it("only relaxes the rules in non-production builds when the override is set", () => {
-    vi.stubEnv("GHOSTHUB_ALLOW_PRIVATE_UNSUBSCRIBE", "1");
+    vi.stubEnv("GHOSTHUB_ALLOW_PRIVATE_TARGETS", "1");
     vi.stubEnv("NODE_ENV", "test");
     expect(assertSafeUrl("https://localhost:4443/u").hostname).toBe("localhost");
     expect(assertSafeUrl("http://127.0.0.1/u").hostname).toBe("127.0.0.1");
     vi.stubEnv("NODE_ENV", "production");
     expect(() => assertSafeUrl("https://localhost:4443/u")).toThrow(UnsafeUrlError); // ignored in production
     vi.stubEnv("NODE_ENV", "test");
-    vi.stubEnv("GHOSTHUB_ALLOW_PRIVATE_UNSUBSCRIBE", "true");
+    vi.stubEnv("GHOSTHUB_ALLOW_PRIVATE_TARGETS", "true");
     expect(() => assertSafeUrl("https://localhost:4443/u")).toThrow(UnsafeUrlError); // only the literal "1" counts
   });
 });
@@ -246,7 +246,7 @@ describe("unsubscribeOneClick", () => {
   });
 
   it("with the dev override, skips the DNS guard so a local fake server can be used", async () => {
-    vi.stubEnv("GHOSTHUB_ALLOW_PRIVATE_UNSUBSCRIBE", "1");
+    vi.stubEnv("GHOSTHUB_ALLOW_PRIVATE_TARGETS", "1");
     vi.stubEnv("NODE_ENV", "test");
     const t = ok(200);
     expect(await unsubscribeOneClick("https://localhost:4443/u", t)).toMatchObject({ ok: true });

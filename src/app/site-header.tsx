@@ -5,6 +5,7 @@ const NAV = [
   { href: "/", label: "Mailboxes" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/newsletters", label: "Newsletters" },
+  { href: "/profiles", label: "Profiles" },
 ] as const;
 
 /** Title, navigation and sign-out shared by every signed-in page. */

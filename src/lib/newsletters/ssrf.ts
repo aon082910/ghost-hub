@@ -79,7 +79,7 @@ export function isPublicIp(address: string): boolean {
 const BAD_SUFFIXES = [".local", ".localhost", ".internal", ".lan", ".home", ".corp", ".intranet", ".arpa", ".test", ".invalid", ".example"];
 
 /** Local development and tests may point at a fake server on this machine. Ignored in production builds. */
-export const allowPrivateTargets = () => devOverride("GHOSTHUB_ALLOW_PRIVATE_UNSUBSCRIBE", "") === "1";
+export const allowPrivateTargets = () => devOverride("GHOSTHUB_ALLOW_PRIVATE_TARGETS", "") === "1";
 
 /** Validate an unsubscribe URL for an automatic request. Throws UnsafeUrlError with a reason when it isn't acceptable. */
 export function assertSafeUrl(raw: string): URL {
