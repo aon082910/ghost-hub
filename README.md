@@ -21,6 +21,7 @@ breached, and clean up, on your own hardware with your own credentials. Your ema
    [Profiles](#profiles)).
 3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores combine how
    you use the service, how long since it last emailed you, and known breaches of it (Have I Been Pwned's public list).
+   A downloadable to-do list (Markdown or CSV) of what's left, riskiest first, helps when moving off an old address.
 4. **Act** — review-first bulk newsletter unsubscribe, and step-by-step guides for deleting the accounts you don't
    need (a direct link, how hard it is, and a ready-made email request where the company takes them). Ghost-Hub never
    deletes an account for you: you do it, record it, and after your next scan it tells you if they keep emailing.

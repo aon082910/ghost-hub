@@ -162,7 +162,19 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
           <BreachPanel status={status} connections={connections} checks={checks} />
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
-            <h2 className="font-medium text-zinc-100">Your services</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-medium text-zinc-100">Your services</h2>
+              <p className="text-xs text-zinc-500">
+                To-do list of what&apos;s left:{" "}
+                <a href="/api/export/checklist?format=md" download className="text-emerald-400 underline">
+                  Markdown
+                </a>{" "}
+                ·{" "}
+                <a href="/api/export/checklist?format=csv" download className="text-emerald-400 underline">
+                  CSV
+                </a>
+              </p>
+            </div>
             <div className="mt-3 space-y-2" aria-label="Filters">
               <div className="flex flex-wrap gap-2">
                 {(

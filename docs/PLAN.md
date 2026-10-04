@@ -92,6 +92,11 @@ published on GitHub so others can host their own.
   those messages. A service or sender is *spam only* when every message was spam: one real message is enough to keep it
   visible, because a genuine company's mail sometimes lands in spam. Spam-only rows are hidden by default behind a toggle
   that shows how many are hidden, and `queueUnsubscribes` refuses them (unsubscribing from spam confirms the address).
+- **Checklist export:** `GET /api/export/checklist?format=md|csv` (behind the login, never cached) lists services still
+  active, not spam-only and not newsletters (`&newsletters=1` adds them), riskiest first. Names come from email headers,
+  so Markdown output escapes every formatting, HTML and link character and CSV cells that start like a formula get a
+  leading apostrophe (`src/lib/checklist.ts`). Nothing is fetched; links are the company's own domain and the bundled
+  deletion guide.
 - **Start over:** ticking "Start over" before a scan zeroes the mailbox's counts, forgets which messages were seen and
   clears its scan history, then rescans. Rows are kept, so decisions (deleted / kept / unsubscribed) survive, and a row
   with no messages is hidden until a scan finds it again. It's refused while a scan is running. Older data has no spam

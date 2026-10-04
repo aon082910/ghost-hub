@@ -19,7 +19,8 @@ First pre-release. Built and tested against fake provider servers; not yet run a
   close, where sign-ups may have been deleted or filed as spam). Services and newsletter senders whose every message
   was in a Spam/Junk folder are marked "spam only" and set aside (a toggle shows them), and Ghost-Hub won't queue an
   unsubscribe for them, since that confirms your address is live. "Start over" recounts a mailbox from scratch and
-  keeps your decisions.
+  keeps your decisions. The dashboard can export a to-do checklist (Markdown or CSV) of the services still on your
+  list, riskiest first, with each company's site, known breaches and how to delete it.
 - **Dashboard**: every service with a 0-100 risk score and a plain explanation, breach matching against Have I Been
   Pwned's public list (optional per-address check with your own key), filters, and a "forgotten account" signal.
   A company that emails from several domains (amazon.com, amazon.co.uk...) is one row, merged only where the
