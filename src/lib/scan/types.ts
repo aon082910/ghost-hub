@@ -13,6 +13,8 @@ export type MessageHeader = {
   listUnsubscribePost?: string;
   listId?: string;
   precedence?: string;
+  /** Found in the provider's Spam/Junk folder (not Trash, which holds mail the user chose to delete). */
+  junk?: boolean;
 };
 
 export type PagesOptions = {

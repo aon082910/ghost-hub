@@ -71,6 +71,13 @@
       "when": 1791140397517,
       "tag": "0009_funny_major_mapleleaf",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791141320851,
+      "tag": "0010_fearless_goliath",
+      "breakpoints": true
     }
   ]
 }

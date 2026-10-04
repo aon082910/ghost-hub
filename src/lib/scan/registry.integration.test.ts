@@ -104,6 +104,17 @@ describe.skipIf(!url)("scan registry (integration)", () => {
     expect((await db.select().from(schema.scans).where(eq(schema.scans.id, full.scanId)))[0].since).toBeNull();
   });
 
+  it("won't reset a mailbox's counts while it is being scanned, but will afterwards", async () => {
+    const reset = await import("./reset");
+    await reg.startScan(ME);
+    await until(() => sourcesCreated === 1);
+    expect(await reset.resetScanData(ME)).toBe(false);
+    release();
+    await until(() => !reg.isScanning(ME));
+    expect(await reset.resetScanData(ME)).toBe(true);
+    expect(await db.select().from(schema.messagesSeen)).toHaveLength(0);
+  });
+
   it("different mailboxes scan independently, and a finished mailbox can scan again", async () => {
     const a = await reg.startScan("a@gmail.com");
     const b = await reg.startScan("b@gmail.com");

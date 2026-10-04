@@ -67,7 +67,7 @@ export default async function Home(props: PageProps<"/">) {
   const note = banner(sp);
   const setup = setupNotes(getEnv());
   const scansByMailbox = new Map(await Promise.all(connections.map(async (c) => [c.mailbox, await latestScan(c.mailbox)] as const)));
-  const summary = summarize((await loadServices()).filter((s) => s.state === "active"));
+  const summary = summarize((await loadServices()).filter((s) => s.state === "active" && !s.spamOnly));
   const oauthButtons = Object.values(OAUTH_PROVIDERS).map((p) => ({
     id: p.id,
     label: p.label,
@@ -288,6 +288,15 @@ function ScanStatus({ mailbox, scan }: { mailbox: string; scan: LatestScan }) {
           <input type="checkbox" name="includeJunk" className="accent-emerald-500" />
           Include spam, trash &amp; sent
         </label>
+        {scan && (
+          <label
+            className="flex items-center gap-1 text-xs text-zinc-400"
+            title="Forget the counts from earlier scans and recount every message. Your decisions (deleted, kept, unsubscribed) are kept."
+          >
+            <input type="checkbox" name="fresh" className="accent-emerald-500" />
+            Start over
+          </label>
+        )}
         <button className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400">
           {scan ? "Scan again" : "Scan"}
         </button>

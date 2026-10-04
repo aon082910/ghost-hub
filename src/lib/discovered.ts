@@ -1,4 +1,4 @@
-import { desc, sql } from "drizzle-orm";
+import { and, desc, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts } from "@/db/schema";
 import { CATEGORY_RANK, type Category } from "./scan/classify";
@@ -19,6 +19,8 @@ export type DiscoveredService = {
   name: string;
   category: Category;
   messages: number;
+  /** How many of those messages were in a Spam/Junk folder. */
+  spamCount: number;
   firstSeen: Date;
   lastSeen: Date;
   mailboxes: number;
@@ -36,6 +38,7 @@ export async function listDiscovered(category?: Category, limit = 300): Promise<
       name: sql<string>`min(${accounts.name})`,
       rank,
       messages: sql<number>`sum(${accounts.messageCount})::int`,
+      spamCount: sql<number>`sum(${accounts.spamCount})::int`,
       firstSeen: sql<Date>`min(${accounts.firstSeen})`,
       lastSeen: sql<Date>`max(${accounts.lastSeen})`,
       mailboxes: sql<number>`count(distinct ${accounts.mailbox})::int`,
@@ -44,7 +47,8 @@ export async function listDiscovered(category?: Category, limit = 300): Promise<
     })
     .from(accounts)
     .groupBy(accounts.domain)
-    .having(category ? sql`max(${RANK_SQL}) = ${CATEGORY_RANK[category]}` : undefined)
+    // A rescan from scratch zeroes the counts first, so a row with no messages is one nothing has re-found yet.
+    .having(and(sql`sum(${accounts.messageCount}) > 0`, category ? sql`max(${RANK_SQL}) = ${CATEGORY_RANK[category]}` : undefined))
     .orderBy(desc(rank), desc(sql`sum(${accounts.messageCount})`))
     .limit(limit);
 
@@ -53,6 +57,7 @@ export async function listDiscovered(category?: Category, limit = 300): Promise<
     name: r.name,
     category: RANK_TO_CATEGORY[r.rank],
     messages: r.messages,
+    spamCount: r.spamCount,
     firstSeen: new Date(r.firstSeen),
     lastSeen: new Date(r.lastSeen),
     mailboxes: r.mailboxes,
@@ -66,7 +71,8 @@ export async function discoveredCounts(): Promise<Record<Category, number>> {
   const rows = await getDb()
     .select({ rank: sql<number>`max(${RANK_SQL})::int` })
     .from(accounts)
-    .groupBy(accounts.domain);
+    .groupBy(accounts.domain)
+    .having(sql`sum(${accounts.messageCount}) > 0`);
   const counts: Record<Category, number> = { account: 0, subscription: 0, receipt: 0, newsletter: 0 };
   for (const r of rows) counts[RANK_TO_CATEGORY[r.rank]]++;
   return counts;

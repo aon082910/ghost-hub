@@ -70,17 +70,22 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
   const level = isLevel(one(sp, "risk")) ? (one(sp, "risk") as Level) : undefined;
   const breachedOnly = one(sp, "breached") === "1";
   const show: Show = isShow(one(sp, "show")) ? (one(sp, "show") as Show) : "active";
+  const showSpam = one(sp, "spam") === "1";
 
   const [all, status, connections, checks, coverage] = await Promise.all([loadServices(), catalogStatus(), listConnections(), loadChecks(), loadCoverage()]);
   const partial = [...coverage].filter(([, c]) => c.kind === "limited" || c.kind === "unfinished");
   // The tiles and type counts describe what's still on your list; the decisions you've made are counted separately.
-  const summary = summarize(all.filter((s) => s.state === "active"));
-  const decisions = decisionCounts(all);
-  const shown = filterServices(all, { category: cat, level, breachedOnly, show });
+  // Services whose every email was in your Spam folder are set aside unless asked for: they're almost never accounts.
+  const spamOnlyCount = all.filter((s) => s.spamOnly).length;
+  const pool = showSpam ? all : all.filter((s) => !s.spamOnly);
+  const summary = summarize(pool.filter((s) => s.state === "active"));
+  const decisions = decisionCounts(pool);
+  const shown = filterServices(pool, { category: cat, level, breachedOnly, show });
   const note = banner(sp);
 
-  const href = (next: { cat?: string; risk?: string; breached?: boolean; show?: Show }) => {
+  const href = (next: { cat?: string; risk?: string; breached?: boolean; show?: Show; spam?: boolean }) => {
     const p = new URLSearchParams();
+    if ("spam" in next ? next.spam : showSpam) p.set("spam", "1");
     const c = "cat" in next ? next.cat : cat;
     const r = "risk" in next ? next.risk : level;
     const b = "breached" in next ? next.breached : breachedOnly;
@@ -183,6 +188,14 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
                   </Link>
                 ))}
               </div>
+              {spamOnlyCount > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={href({ spam: !showSpam })} className={chip(showSpam)}>
+                    {showSpam ? "Showing" : "Hiding"} {spamOnlyCount.toLocaleString("en-US")} spam-only service{spamOnlyCount === 1 ? "" : "s"}
+                  </Link>
+                  <span className="text-xs text-zinc-500">Companies whose email only ever reached your Spam folder, so probably not accounts of yours.</span>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <Link href={href({ risk: undefined })} className={chip(!level)}>
                   Any risk
@@ -321,6 +334,11 @@ function ServiceRow({ s }: { s: ServiceRisk }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {s.spamOnly && (
+              <span className="text-[10px] uppercase tracking-wide text-zinc-500" title="Every email from this company was in your Spam folder">
+                Spam only
+              </span>
+            )}
             {s.state !== "active" && (
               <span className={`text-[10px] uppercase tracking-wide ${s.stillEmailing ? "text-amber-400" : "text-zinc-500"}`}>
                 {s.stillEmailing ? "Still emailing" : s.state === "deleted" ? "Deleted" : "Kept"}

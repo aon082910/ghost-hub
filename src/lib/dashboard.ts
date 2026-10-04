@@ -14,6 +14,8 @@ export type CompanyService = DiscoveredService & {
 };
 
 export type ServiceRisk = CompanyService & {
+  /** Every message from this company was in a Spam/Junk folder: probably not a service you signed up for. */
+  spamOnly: boolean;
   risk: RiskResult;
   /** The user marked it deleted, yet it kept emailing more than 3 days later (seen on a later scan). */
   stillEmailing: boolean;
@@ -23,6 +25,9 @@ export const LEVELS: Level[] = ["high", "medium", "low", "minimal"];
 export const isLevel = (v: string | undefined): v is Level => v !== undefined && (LEVELS as string[]).includes(v);
 
 const MAX_MERGED_DOMAINS = 50;
+
+/** True when there is mail and none of it was outside a Spam/Junk folder. */
+export const isSpamOnly = (s: { messages: number; spamCount: number }) => s.messages > 0 && s.spamCount >= s.messages;
 
 /**
  * Fold services that are the same company (per the deletion-guide dataset, see `groupByCompany`) into one row, so a
@@ -45,6 +50,7 @@ export function mergeCompanies(services: DiscoveredService[]): CompanyService[] 
       domains: members.map((m) => m.domain),
       category: members.reduce((best, m) => (CATEGORY_RANK[m.category] > CATEGORY_RANK[best] ? m.category : best), lead.category),
       messages: members.reduce((n, m) => n + m.messages, 0),
+      spamCount: members.reduce((n, m) => n + m.spamCount, 0),
       firstSeen: new Date(Math.min(...members.map((m) => m.firstSeen.getTime()))),
       lastSeen: new Date(Math.max(...members.map((m) => m.lastSeen.getTime()))),
       mailboxes: Math.max(...members.map((m) => m.mailboxes)),
@@ -67,6 +73,7 @@ export async function loadServices(now = new Date()): Promise<ServiceRisk[]> {
   return mergeCompanies(services)
     .map((s) => ({
       ...s,
+      spamOnly: isSpamOnly(s),
       stillEmailing: s.state === "deleted" && s.deletedAt !== null && s.lastSeen.getTime() > s.deletedAt.getTime() + STILL_EMAILING_AFTER_MS,
       risk: assessRisk(
         { category: s.category, firstSeen: s.firstSeen, lastSeen: s.lastSeen, breaches: breachesFor(s.domains, index, confirmed) },

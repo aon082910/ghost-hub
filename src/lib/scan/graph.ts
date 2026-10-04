@@ -21,6 +21,7 @@ export type GraphSourceOptions = HttpDeps & { getToken: () => Promise<string>; b
 /** Reads message headers through Microsoft Graph with `Mail.Read`. Bodies are never requested. */
 export class GraphSource implements MailSource {
   private skippedFolderIds: Promise<Set<string>> | null = null;
+  private junkFolderId: string | null = null;
 
   constructor(private readonly o: GraphSourceOptions) {}
 
@@ -72,7 +73,10 @@ export class GraphSource implements MailSource {
       const ids = new Set<string>();
       for (const name of SKIPPED_FOLDERS) {
         const f = await this.request<{ id?: string }>(`${this.base}/me/mailFolders/${name}?$select=id`, signal, {}, true);
-        if (f?.id) ids.add(f.id);
+        if (f?.id) {
+          ids.add(f.id);
+          if (name === "junkemail") this.junkFolderId = f.id;
+        }
       }
       return ids;
     })();
@@ -80,7 +84,9 @@ export class GraphSource implements MailSource {
   }
 
   async *pages({ skip, signal, since, includeJunk }: PagesOptions): AsyncIterable<MessageHeader[]> {
-    const skipFolders = includeJunk ? new Set<string>() : await this.loadSkippedFolders(signal);
+    // Even when junk is included we need the Junk folder's id, to tell its mail from the rest.
+    const folderIds = await this.loadSkippedFolders(signal);
+    const skipFolders = includeJunk ? new Set<string>() : folderIds;
     const select = "id,receivedDateTime,from,subject,parentFolderId,internetMessageHeaders";
     // Graph requires the filtered property to lead the $orderby, which it already does.
     const filter = since ? `&$filter=${encodeURIComponent(`receivedDateTime ge ${since.toISOString()}`)}` : "";
@@ -95,7 +101,7 @@ export class GraphSource implements MailSource {
       const headers: MessageHeader[] = [];
       for (const m of page.value ?? []) {
         if (skip(m.id) || (m.parentFolderId && skipFolders.has(m.parentFolderId))) continue;
-        headers.push(toHeader(m));
+        headers.push(toHeader(m, this.junkFolderId !== null && m.parentFolderId === this.junkFolderId));
       }
       if (headers.length) yield headers;
       url = page["@odata.nextLink"];
@@ -105,7 +111,7 @@ export class GraphSource implements MailSource {
   async close() {}
 }
 
-function toHeader(m: GraphMessage): MessageHeader {
+function toHeader(m: GraphMessage, junk: boolean): MessageHeader {
   const h: Record<string, string> = {};
   for (const { name, value } of m.internetMessageHeaders ?? []) h[name.toLowerCase()] ??= value;
   const t = m.receivedDateTime ? Date.parse(m.receivedDateTime) : NaN;
@@ -119,5 +125,6 @@ function toHeader(m: GraphMessage): MessageHeader {
     listUnsubscribePost: h["list-unsubscribe-post"],
     listId: h["list-id"],
     precedence: h.precedence,
+    junk,
   };
 }

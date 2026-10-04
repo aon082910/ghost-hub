@@ -73,6 +73,8 @@ export const accounts = pgTable(
     firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
     messageCount: integer("message_count").notNull().default(1),
+    /** How many of those messages were in a Spam/Junk folder. All of them means a spam-only sender. */
+    spamCount: integer("spam_count").notNull().default(0),
     deletionUrl: text("deletion_url"),
     status: text("status").notNull().default("active"), // active | ignored | deleted
     /** When the user marked the account deleted. Mail after this means the company is still emailing. */
@@ -92,6 +94,8 @@ export const newsletters = pgTable(
     listUnsubscribe: text("list_unsubscribe"), // raw List-Unsubscribe header value
     oneClick: boolean("one_click").notNull().default(false), // List-Unsubscribe-Post present (RFC 8058)
     messageCount: integer("message_count").notNull().default(1),
+    /** How many of those messages were in a Spam/Junk folder. All of them means a spam-only sender. */
+    spamCount: integer("spam_count").notNull().default(0),
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
     status: text("status").notNull().default("subscribed"), // subscribed | unsubscribed | failed | ignored
     /** When Ghost-Hub (or the user, by hand) unsubscribed. Mail after this means the sender is ignoring it. */

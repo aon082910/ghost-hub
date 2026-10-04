@@ -87,6 +87,15 @@ published on GitHub so others can host their own.
   them too: IMAP lists every selectable folder, Gmail adds `includeSpamTrash=true` and drops `-in:sent -in:drafts`, Graph
   stops filtering by folder. Mail from your own address is never counted as a service, so Sent adds nothing by itself.
   Expect extra one-off senders from spam; they are mostly category "newsletter" with one message.
+- **Spam-only:** each source marks mail that sat in the provider's spam folder (IMAP Junk/Spam/Bulk folders, Gmail's
+  `SPAM` label, Graph's Junk Email folder; Trash is not spam). `accounts.spam_count` and `newsletters.spam_count` count
+  those messages. A service or sender is *spam only* when every message was spam: one real message is enough to keep it
+  visible, because a genuine company's mail sometimes lands in spam. Spam-only rows are hidden by default behind a toggle
+  that shows how many are hidden, and `queueUnsubscribes` refuses them (unsubscribing from spam confirms the address).
+- **Start over:** ticking "Start over" before a scan zeroes the mailbox's counts, forgets which messages were seen and
+  clears its scan history, then rescans. Rows are kept, so decisions (deleted / kept / unsubscribed) survive, and a row
+  with no messages is hidden until a scan finds it again. It's refused while a scan is running. Older data has no spam
+  counts, and skipped-as-seen messages are never re-read, so this is how existing mailboxes pick them up.
 - **Exactness:** each page of results and its "seen" ids are saved in one transaction, so a crash, cancel or
   restart can never double count or lose a message, and scanning again continues where it stopped. Scans left
   "running" by a restart are marked failed on startup. One scan runs per mailbox at a time.

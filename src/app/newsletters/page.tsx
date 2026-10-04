@@ -44,8 +44,12 @@ export default async function Newsletters(props: PageProps<"/newsletters">) {
   const sp = await props.searchParams;
   const show = (SHOWS.find((s) => s.id === one(sp, "show"))?.id ?? "active") as Show;
   const method = METHODS.find((m) => m.id === one(sp, "method"))?.id;
+  const showSpam = one(sp, "spam") === "1";
 
-  const [all, pending, connections] = await Promise.all([listNewsletters(), listPending(), listConnections()]);
+  const [everyone, pending, connections] = await Promise.all([listNewsletters(), listPending(), listConnections()]);
+  // Spam-only senders are set aside unless asked for: they aren't lists you signed up to.
+  const spamOnlyCount = everyone.filter((n) => n.spamOnly).length;
+  const all = showSpam ? everyone : everyone.filter((n) => !n.spamOnly);
   const multiMailbox = connections.length > 1;
 
   const matchesShow = (n: NewsletterRow) =>
@@ -61,12 +65,14 @@ export default async function Newsletters(props: PageProps<"/newsletters">) {
     stillSending: all.filter((n) => n.stillSending).length,
   };
 
-  const href = (next: { show?: Show; method?: MethodFilter }) => {
+  const href = (next: { show?: Show; method?: MethodFilter; spam?: boolean }) => {
     const p = new URLSearchParams();
     const sh = "show" in next ? next.show : show;
     const m = "method" in next ? next.method : method;
+    const sp1 = "spam" in next ? next.spam : showSpam;
     if (sh && sh !== "active") p.set("show", sh);
     if (m) p.set("method", m);
+    if (sp1) p.set("spam", "1");
     const qs = p.toString();
     return qs ? `/newsletters?${qs}` : "/newsletters";
   };
@@ -141,6 +147,14 @@ export default async function Newsletters(props: PageProps<"/newsletters">) {
                   </Link>
                 ))}
               </div>
+              {spamOnlyCount > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={href({ spam: !showSpam })} className={chip(showSpam)}>
+                    {showSpam ? "Showing" : "Hiding"} {spamOnlyCount.toLocaleString("en-US")} spam-only sender{spamOnlyCount === 1 ? "" : "s"}
+                  </Link>
+                  <span className="text-xs text-zinc-500">Senders whose mail only ever reached your Spam folder. Don&apos;t unsubscribe from spam.</span>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <Link href={href({ method: undefined })} className={chip(!method)}>
                   Any method
@@ -193,7 +207,7 @@ function Tile({ label, value, tone, hint }: { label: string; value: number; tone
 }
 
 function SenderRow({ n, showMailbox }: { n: NewsletterRow; showMailbox: boolean }) {
-  const selectable = isOpen(n) && n.method.method === "one-click" && !n.blocked;
+  const selectable = isOpen(n) && n.method.method === "one-click" && !n.blocked && !n.spamOnly;
   const title = n.senderName || n.senderEmail;
   return (
     <li className="flex gap-3 py-3">
@@ -210,6 +224,14 @@ function SenderRow({ n, showMailbox }: { n: NewsletterRow; showMailbox: boolean 
           <span className="truncate text-sm text-zinc-100">{title}</span>
           <MethodBadge n={n} />
           <StatusBadge n={n} />
+          {n.spamOnly && (
+            <span
+              title="All of this sender's mail was in your Spam folder"
+              className="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-400"
+            >
+              Spam only
+            </span>
+          )}
         </div>
         <div className="truncate text-xs text-zinc-500">
           {n.senderEmail} · {n.messageCount.toLocaleString("en-US")} emails, last {fmt(n.lastSeen)}
@@ -220,6 +242,7 @@ function SenderRow({ n, showMailbox }: { n: NewsletterRow; showMailbox: boolean 
             Link withheld: {n.blocked} Ghost-Hub won&apos;t contact it or offer it to you.
           </div>
         )}
+        {n.spamOnly && <div className="mt-1 text-xs text-zinc-500">Looks like spam. Mark it as spam in your mail app; unsubscribing can confirm your address is live.</div>}
         {n.lastError && <div className="mt-1 text-xs text-amber-400">{n.lastError}</div>}
         {n.stillSending && n.unsubscribedAt && (
           <div className="mt-1 text-xs text-amber-400">
@@ -245,7 +268,7 @@ function SenderRow({ n, showMailbox }: { n: NewsletterRow; showMailbox: boolean 
 
 /** For senders that can't be done automatically: the link or address to use, plus a way to record that you did. */
 function Manual({ n }: { n: NewsletterRow }) {
-  if (!isOpen(n) || n.blocked) return null;
+  if (!isOpen(n) || n.blocked || n.spamOnly) return null;
   const m = n.method;
   if (m.method !== "link" && m.method !== "mailto") return null;
   return (

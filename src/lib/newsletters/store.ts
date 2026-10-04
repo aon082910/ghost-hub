@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { actions, newsletters } from "@/db/schema";
 import { mapLimit } from "../scan/http";
@@ -18,6 +18,8 @@ export type NewsletterRow = {
   senderName: string | null;
   domain: string;
   messageCount: number;
+  /** Every message from this sender was in a Spam/Junk folder. Unsubscribing from spam tells the sender your address is live. */
+  spamOnly: boolean;
   lastSeen: Date;
   status: string;
   unsubscribedAt: Date | null;
@@ -50,7 +52,8 @@ function blockedReason(m: UnsubscribeMethod): string | null {
 /** Newsletter senders across all mailboxes, busiest first. */
 export async function listNewsletters(): Promise<NewsletterRow[]> {
   const db = getDb();
-  const rows = await db.select().from(newsletters).orderBy(desc(newsletters.messageCount), asc(newsletters.senderEmail));
+  // A rescan from scratch zeroes the counts first, so a sender with none is one nothing has re-found yet.
+  const rows = await db.select().from(newsletters).where(gt(newsletters.messageCount, 0)).orderBy(desc(newsletters.messageCount), asc(newsletters.senderEmail));
   if (!rows.length) return [];
 
   // Latest automatic attempt per sender, to explain failures.
@@ -72,6 +75,7 @@ export async function listNewsletters(): Promise<NewsletterRow[]> {
       senderName: r.senderName,
       domain: r.domain,
       messageCount: r.messageCount,
+      spamOnly: r.spamCount >= r.messageCount,
       lastSeen: r.lastSeen,
       status: r.status,
       unsubscribedAt: r.unsubscribedAt,
@@ -113,6 +117,7 @@ export async function queueUnsubscribes(ids: string[]): Promise<QueueResult> {
     if (!r) result.skipped.push({ id, reason: "not found" });
     else if (r.status !== "subscribed" && r.status !== "failed") result.skipped.push({ id, reason: `already ${r.status}` });
     else if (waiting.has(id)) result.skipped.push({ id, reason: "already waiting for review" });
+    else if (r.messageCount > 0 && r.spamCount >= r.messageCount) result.skipped.push({ id, reason: "only seen in spam; unsubscribing would confirm your address" });
     else {
       const m = rowMethod(r);
       if (m.method !== "one-click") {

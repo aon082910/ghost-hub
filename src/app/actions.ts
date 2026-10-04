@@ -11,6 +11,7 @@ import { cancelProfileScan, startProfileScan } from "@/lib/profiles/runner";
 import { setServiceStatuses } from "@/lib/deletion/store";
 import { addUsername, removeUsername } from "@/lib/profiles/store";
 import { isDepth, sinceFor } from "@/lib/scan/depth";
+import { resetScanData } from "@/lib/scan/reset";
 import { cancelScan, startScan } from "@/lib/scan/registry";
 
 export type ConnectImapState = { error?: string };
@@ -55,6 +56,8 @@ export async function scanMailbox(formData: FormData) {
   const mailbox = formData.get("mailbox");
   if (typeof mailbox !== "string" || !(await findConnection(mailbox))) redirect("/");
   const depth = formData.get("depth");
+  // "Start over" recounts everything. It never runs while a scan is going, and a scan already running is simply returned.
+  if (formData.get("fresh") === "on") await resetScanData(mailbox);
   await startScan(mailbox, { since: isDepth(depth) ? sinceFor(depth) : undefined, includeJunk: formData.get("includeJunk") === "on" });
   redirect("/");
 }

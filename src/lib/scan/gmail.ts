@@ -4,7 +4,7 @@ import { HEADER_NAMES, type MailSource, type MessageHeader, type PagesOptions } 
 import { parseAddress } from "./classify";
 
 type GmailList = { messages?: { id: string }[]; nextPageToken?: string };
-type GmailMessage = { id: string; internalDate?: string; payload?: { headers?: { name: string; value: string }[] } };
+type GmailMessage = { id: string; internalDate?: string; labelIds?: string[]; payload?: { headers?: { name: string; value: string }[] } };
 
 const PAGE_SIZE = 500;
 const YIELD_EVERY = 100;
@@ -66,7 +66,7 @@ export class GmailSource implements MailSource {
   }
 
   private async metadata(id: string, signal?: AbortSignal): Promise<MessageHeader | null> {
-    const params = new URLSearchParams({ format: "metadata", fields: "id,internalDate,payload/headers" });
+    const params = new URLSearchParams({ format: "metadata", fields: "id,internalDate,labelIds,payload/headers" });
     for (const h of HEADER_NAMES) params.append("metadataHeaders", h);
     const m = await this.get<GmailMessage>(`/users/me/messages/${encodeURIComponent(id)}?${params}`, signal, true);
     if (!m) return null; // deleted between list and get
@@ -85,6 +85,7 @@ export class GmailSource implements MailSource {
       listUnsubscribePost: h["list-unsubscribe-post"],
       listId: h["list-id"],
       precedence: h.precedence,
+      junk: m.labelIds?.includes("SPAM") ?? false,
     };
   }
 

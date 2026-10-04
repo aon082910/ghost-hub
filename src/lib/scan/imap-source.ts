@@ -31,6 +31,11 @@ const SKIPPED_SPECIAL_USE = new Set(["\\Junk", "\\Trash", "\\Sent", "\\Drafts"])
 // Not every server sets special-use flags (Yahoo's spam folder is "Bulk"), so fall back to the name.
 const SKIPPED_NAME = /^(?:spam|junk|bulk(?: mail)?|trash|deleted(?: items| messages)?|sent(?: items| mail| messages)?|drafts?)$/i;
 
+/** The provider's spam folder (flagged as Junk by the server, or named like one: Yahoo's is "Bulk"). Trash is deliberately not included. */
+const JUNK_NAME = /^(?:spam|junk|bulk(?: mail)?)$/i;
+export const isJunkFolder = (f: { path: string; specialUse?: string }) =>
+  f.specialUse === "\\Junk" || JUNK_NAME.test(f.path.split(/[/.]/).pop() ?? f.path);
+
 /** Folders that can't be opened are always skipped. Spam, Trash, Sent and Drafts are skipped unless `includeJunk`. */
 export const isSkippedFolder = (f: { path: string; specialUse?: string; flags?: Set<string> }, includeJunk = false) =>
   f.flags?.has("\\Noselect") === true ||
@@ -41,7 +46,7 @@ export const isSkippedFolder = (f: { path: string; specialUse?: string; flags?: 
 /** Reads message headers over IMAP, one folder at a time, newest first. Bodies are never requested. */
 export class ImapSource implements MailSource {
   private connected = false;
-  private readonly folders = new Map<boolean, Promise<{ path: string }[]>>();
+  private readonly folders = new Map<boolean, Promise<{ path: string; specialUse?: string }[]>>();
 
   constructor(private readonly client: ImapScanClient) {}
 
@@ -103,7 +108,7 @@ export class ImapSource implements MailSource {
             { uid: true, envelope: true, internalDate: true, headers: [...HEADER_NAMES] },
             { uid: true },
           )) {
-            headers.push(toHeader(idFor(folder.path, validity, m.uid), m));
+            headers.push(toHeader(idFor(folder.path, validity, m.uid), m, isJunkFolder(folder)));
           }
           if (headers.length) yield headers;
         }
@@ -125,7 +130,7 @@ export class ImapSource implements MailSource {
 
 const idFor = (path: string, validity: string, uid: number) => `${path}:${validity}:${uid}`;
 
-function toHeader(id: string, m: FetchedMessage): MessageHeader {
+function toHeader(id: string, m: FetchedMessage, junk: boolean): MessageHeader {
   const raw = m.headers ? parseHeaderBlock(m.headers.toString("utf8")) : {};
   const from = m.envelope?.from?.[0];
   const when = m.envelope?.date ?? m.internalDate;
@@ -140,5 +145,6 @@ function toHeader(id: string, m: FetchedMessage): MessageHeader {
     listUnsubscribePost: raw["list-unsubscribe-post"],
     listId: raw["list-id"],
     precedence: raw.precedence,
+    junk,
   };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GmailSource } from "./gmail";
 import { GraphSource } from "./graph";
 import { ScanHttpError, chunk, mapLimit, requestJson, retryAfterMs } from "./http";
-import { ImapSource, isSkippedFolder, type FetchedMessage, type ImapScanClient } from "./imap-source";
+import { ImapSource, isJunkFolder, isSkippedFolder, type FetchedMessage, type ImapScanClient } from "./imap-source";
 import type { MessageHeader } from "./types";
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -69,9 +69,10 @@ describe("http helpers", () => {
 });
 
 describe("GmailSource", () => {
-  const message = (id: string, headers: Record<string, string>, internalDate = "1700000000000") => ({
+  const message = (id: string, headers: Record<string, string>, internalDate = "1700000000000", labelIds?: string[]) => ({
     id,
     internalDate,
+    ...(labelIds ? { labelIds } : {}),
     payload: { headers: Object.entries(headers).map(([name, value]) => ({ name, value })) },
   });
 
@@ -141,6 +142,17 @@ describe("GmailSource", () => {
     const plain = fakeGmail({ a: message("a", { From: "a@a.com" }) }, [["a"]]);
     await collect(make(plain).pages(noSkip));
     expect(new URL(plain.urls.find((u) => u.includes("/messages?"))!).searchParams.has("includeSpamTrash")).toBe(false);
+  });
+
+  it("marks mail labelled SPAM as junk and asks Gmail for the label", async () => {
+    const f = fakeGmail(
+      { a: message("a", { From: "a@a.com" }, undefined, ["INBOX"]), b: message("b", { From: "b@b.com" }, undefined, ["SPAM", "UNREAD"]), c: message("c", { From: "c@c.com" }) },
+      [["a", "b", "c"]],
+    );
+    const msgs = (await collect(make(f).pages({ ...noSkip, includeJunk: true }))).flat();
+    expect(msgs.map((m) => m.junk)).toEqual([false, true, false]);
+    const metaUrl = new URL(f.urls.find((u) => /messages\/a\?/.test(u))!);
+    expect(metaUrl.searchParams.get("fields")).toContain("labelIds");
   });
 
   it("doesn't fetch skipped messages and tolerates ones deleted mid-scan", async () => {
@@ -222,11 +234,17 @@ describe("GraphSource", () => {
     expect(decodeURIComponent(first.url)).not.toMatch(/body/i); // no bodies
   });
 
-  it("with includeJunk it keeps Junk, Deleted and Sent mail and never looks the folders up", async () => {
+  it("with includeJunk it keeps Junk, Deleted and Sent mail, and marks only the Junk folder's mail as junk", async () => {
     const f = fakeGraph([{ value: [gm("1", "inbox"), gm("2", "F-junk"), gm("3", "F-sent"), gm("4", "F-del")] }]);
     const msgs = (await collect(make(f).pages({ ...noSkip, includeJunk: true }))).flat();
     expect(msgs.map((m) => m.id)).toEqual(["1", "2", "3", "4"]);
-    expect(f.calls.some((c) => /mailFolders/.test(c.url))).toBe(false);
+    expect(msgs.map((m) => m.junk)).toEqual([false, true, false, false]); // Trash and Sent aren't spam
+  });
+
+  it("without includeJunk nothing from Junk is returned, and what is returned isn't marked junk", async () => {
+    const f = fakeGraph([{ value: [gm("1", "inbox"), gm("2", "F-junk")] }]);
+    const msgs = (await collect(make(f).pages(noSkip))).flat();
+    expect(msgs.map((m) => [m.id, m.junk])).toEqual([["1", false]]);
   });
 
   it("skips known ids", async () => {
@@ -327,6 +345,22 @@ describe("ImapSource", () => {
     const plain = (await collect(src.pages(noSkip))).flat();
     expect(plain.length).toBe(3);
     expect(state.locked.slice(0, 7)).toEqual(["INBOX", "Archive", "Junk", "Trash", "Sent Items", "Draft", "Bulk"]);
+  });
+
+  it("recognises spam folders by flag or name, but not Trash or Sent", () => {
+    expect(isJunkFolder({ path: "Junk", specialUse: "\\Junk" })).toBe(true);
+    expect(isJunkFolder({ path: "Bulk" })).toBe(true);
+    expect(isJunkFolder({ path: "INBOX.Spam" })).toBe(true);
+    expect(isJunkFolder({ path: "Bulk Mail" })).toBe(true);
+    for (const p of ["INBOX", "Trash", "Sent Items", "Draft", "Archive", "Junkyard"]) expect(isJunkFolder({ path: p }), p).toBe(false);
+    expect(isJunkFolder({ path: "Trash", specialUse: "\\Trash" })).toBe(false);
+  });
+
+  it("marks only mail read from a spam folder as junk", async () => {
+    const { client } = fakeClient(FOLDERS, { INBOX: [1], Trash: [2], "Sent Items": [3], Bulk: [4], Junk: [5] });
+    const msgs = (await collect(new ImapSource(client).pages({ ...noSkip, includeJunk: true }))).flat();
+    const byFolder = Object.fromEntries(msgs.map((m) => [m.id.split(":")[0], m.junk]));
+    expect(byFolder).toEqual({ INBOX: false, Trash: false, "Sent Items": false, Bulk: true, Junk: true });
   });
 
   it("scans the remaining folders newest-first, with ids that include the folder and uidValidity", async () => {

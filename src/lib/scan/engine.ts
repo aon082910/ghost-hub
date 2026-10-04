@@ -6,7 +6,7 @@ import { CERTIFICATE_HELP, isCertificateError } from "../tls-errors";
 import { CATEGORY_RANK, classify, serviceName, type Category } from "./classify";
 import type { MailSource, MessageHeader } from "./types";
 
-export type AccountAgg = { domain: string; name: string; category: Category; count: number; first: Date; last: Date };
+export type AccountAgg = { domain: string; name: string; category: Category; count: number; spam: number; first: Date; last: Date };
 export type NewsletterAgg = {
   senderEmail: string;
   senderName: string | null;
@@ -14,6 +14,7 @@ export type NewsletterAgg = {
   listUnsubscribe: string | null;
   oneClick: boolean;
   count: number;
+  spam: number;
   last: Date;
 };
 
@@ -38,9 +39,10 @@ export function aggregate(headers: MessageHeader[], mailbox: string, now = new D
     if (c.category) {
       const cur = acc.get(c.domain);
       if (!cur) {
-        acc.set(c.domain, { domain: c.domain, name: c.name, category: c.category, count: 1, first: date, last: date });
+        acc.set(c.domain, { domain: c.domain, name: c.name, category: c.category, count: 1, spam: h.junk ? 1 : 0, first: date, last: date });
       } else {
         cur.count++;
+        if (h.junk) cur.spam++;
         if (CATEGORY_RANK[c.category] > CATEGORY_RANK[cur.category]) cur.category = c.category;
         if (date < cur.first) cur.first = date;
         if (date > cur.last) cur.last = date;
@@ -53,9 +55,10 @@ export function aggregate(headers: MessageHeader[], mailbox: string, now = new D
       const n = c.newsletter;
       const cur = news.get(n.senderEmail);
       if (!cur) {
-        news.set(n.senderEmail, { ...n, domain: c.domain, count: 1, last: date });
+        news.set(n.senderEmail, { ...n, domain: c.domain, count: 1, spam: h.junk ? 1 : 0, last: date });
       } else {
         cur.count++;
+        if (h.junk) cur.spam++;
         // Newest message's unsubscribe info wins.
         if (date >= cur.last) {
           cur.last = date;
@@ -110,12 +113,14 @@ export async function savePage(tx: Tx, mailbox: string, page: MessageHeader[], n
           firstSeen: a.first,
           lastSeen: a.last,
           messageCount: a.count,
+          spamCount: a.spam,
         })),
       )
       .onConflictDoUpdate({
         target: [accounts.mailbox, accounts.domain],
         set: {
           messageCount: sql`${accounts.messageCount} + excluded.message_count`,
+          spamCount: sql`${accounts.spamCount} + excluded.spam_count`,
           firstSeen: sql`least(${accounts.firstSeen}, excluded.first_seen)`,
           lastSeen: sql`greatest(${accounts.lastSeen}, excluded.last_seen)`,
           category: sql`case when ${rank(sql`excluded.category`)} > ${rank(sql`${accounts.category}`)} then excluded.category else ${accounts.category} end`,
@@ -135,6 +140,7 @@ export async function savePage(tx: Tx, mailbox: string, page: MessageHeader[], n
           listUnsubscribe: n.listUnsubscribe,
           oneClick: n.oneClick,
           messageCount: n.count,
+          spamCount: n.spam,
           lastSeen: n.last,
         })),
       )
@@ -142,6 +148,7 @@ export async function savePage(tx: Tx, mailbox: string, page: MessageHeader[], n
         target: [newsletters.mailbox, newsletters.senderEmail],
         set: {
           messageCount: sql`${newsletters.messageCount} + excluded.message_count`,
+          spamCount: sql`${newsletters.spamCount} + excluded.spam_count`,
           // Whichever side has the newer message supplies the unsubscribe link, falling back to the other.
           listUnsubscribe: sql`case when excluded.last_seen > ${newsletters.lastSeen} then coalesce(excluded.list_unsubscribe, ${newsletters.listUnsubscribe}) else coalesce(${newsletters.listUnsubscribe}, excluded.list_unsubscribe) end`,
           oneClick: sql`case when excluded.last_seen > ${newsletters.lastSeen} and excluded.list_unsubscribe is not null then excluded.one_click when ${newsletters.listUnsubscribe} is null then excluded.one_click else ${newsletters.oneClick} end`,
