@@ -14,7 +14,8 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
    web for "shadow profiles" under your email, phone or username. Everything is checked against breach data.
 3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores
    combine how you use the service, how long since it last emailed you, and known breaches of it.
-4. **Act** — deletion guides, review-first bulk newsletter unsubscribe. Nothing happens without your approval.
+4. **Act** — review-first bulk newsletter unsubscribe (deletion guides are planned). Nothing happens without your
+   approval.
 
 ## Privacy model
 
@@ -35,6 +36,7 @@ Ghost-Hub talks only to the services you connect, plus (optionally) Have I Been 
 | Google, Microsoft, or your IMAP server | Connecting and scanning | Your login and requests for message headers |
 | Have I Been Pwned, public breach list | Press **Refresh breach list**, or after a scan if the list is over a week old | Nothing about you: it's a plain download |
 | Have I Been Pwned, address lookup | Press **Check** on the dashboard, and only if you set `HIBP_API_KEY` | That one email address and your key |
+| A newsletter sender's unsubscribe address | Only after you review and approve it | One HTTPS POST (`List-Unsubscribe=One-Click`), no cookies or login |
 
 Set `HIBP_ENABLED=false` to turn off every Have I Been Pwned call. Breach checks then don't run and scores use
 only how you use each service.

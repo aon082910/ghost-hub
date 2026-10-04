@@ -36,6 +36,13 @@
       "when": 1791120236439,
       "tag": "0004_mute_blink",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791121498132,
+      "tag": "0005_tricky_reavers",
+      "breakpoints": true
     }
   ]
 }

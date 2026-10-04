@@ -50,7 +50,9 @@ published on GitHub so others can host their own.
 4. **Dashboard + risk** *(done)* — `/dashboard` with summary tiles, breach data panel, filters (type, risk, known
    breach) and an expandable "why this score" per service. See "How risk scoring works" below. Verified end to
    end against a fake HIBP; nothing has run against the real HIBP API from the app.
-5. **Newsletters** — `List-Unsubscribe` detection, review queue, bulk unsubscribe (one-click POST + mailto).
+5. **Newsletters** *(done)* — `/newsletters` lists senders found by scans, a review page shows exactly where each
+   request goes, and approving sends RFC 8058 one-click POSTs. Everything else is done by hand with a link or
+   address. Verified end to end over real TLS against a fake sender. See "How unsubscribing works".
 6. **Shadow scanner** — site list, username/email/phone checks, rate limiting, results view.
 7. **Value recovery** — detect gift cards/coupons/rewards in receipts and promos.
 8. **Polish** — deletion guides, Unraid Community Apps template, release docs.
@@ -94,6 +96,35 @@ published on GitHub so others can host their own.
 - **Levels**: high 60+, medium 35+, low 15+, minimal below that. It's a rule of thumb for deciding what to look at
   first, not a security verdict. Without an HIBP key, "likely" is an estimate from dates.
 
+## How unsubscribing works
+
+Unsubscribe links come out of emails, and anyone can send you an email, so every request is treated as hostile input.
+
+- **Only RFC 8058 one-click is automatic**: an `https` link in `List-Unsubscribe` plus `List-Unsubscribe-Post:
+  List-Unsubscribe=One-Click`. A plain link may need a confirmation page and a GET must never change state, so
+  those are shown for you to open. `mailto:` needs mail sent, which a read-only connection can't do, so your own mail
+  app does it. Plain `http` links are never offered.
+- **Review first**: select senders, then a review page lists each exact destination. Approving submits the ids you
+  were shown (not "everything pending"), each action is claimed with one conditional UPDATE so a double click or two
+  tabs can't send twice, and the request is rebuilt from the sender's stored header and re-validated at that moment.
+- **What a request is**: one POST, fixed body, fixed headers (no cookies, no auth), a 15 s timeout, redirects not
+  followed, response body never read. Only the status code matters: 2xx is success, 3xx and the rest are recorded as
+  failures with a plain reason.
+- **Network guard** (`src/lib/newsletters/ssrf.ts`): the URL must be `https` with no credentials, the default port, a
+  real multi-label hostname (no IP literals in any spelling, no `.local`, `.internal`...). The name is resolved
+  at connect time and refused if any address is private, loopback, link-local (including cloud metadata), multicast,
+  IPv4-mapped IPv6, NAT64, 6to4 or otherwise reserved, so DNS rebinding can't swap in an internal address.
+  Links that fail these checks are withheld in the list: not requested, not offered to open.
+- **After**: the sender is marked unsubscribed with a timestamp. If mail keeps arriving more than 3 days later (seen
+  on the next scan) it is flagged "still sending". Failures can be retried.
+- **Development only**: `GHOSTHUB_ALLOW_PRIVATE_UNSUBSCRIBE=1` lets a local fake sender be used. It is ignored in
+  production builds.
+
+## Gotchas
+
+- A `<button formAction={fn}>` inside a form doesn't submit its own `name`/`value`. Row-level buttons bind their id
+  instead (`fn.bind(null, id)`); a form-level `action` does include the clicked button's value.
+
 ## Known gaps / backlog
 
 - No scan depth limit (e.g. "last 3 years"); a very large mailbox is scanned in full.
@@ -102,6 +133,9 @@ published on GitHub so others can host their own.
 - Services are listed per domain; related domains (amazon.com / amazon.co.uk) aren't merged.
 - Breaches are matched by domain only, so a service that changed domains, or HIBP entries without a domain, are missed.
 - The per-address HIBP check only covers connected mailboxes, not other addresses or phone numbers.
+- Senders that offer only a web link or `mailto:` are never automated, by design.
+- Unsubscribing isn't verified beyond the HTTP status and whether mail keeps arriving; the sender's page isn't read.
+- The real HTTPS transport has only been run against a local fake with a self-signed certificate, not a real sender.
 
 ## Open questions
 

@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts, breachChecks, mailboxBreaches, mailboxConnections, messagesSeen, newsletters, scans } from "@/db/schema";
+import { accounts, actions, breachChecks, mailboxBreaches, mailboxConnections, messagesSeen, newsletters, scans } from "@/db/schema";
 import { decrypt, encrypt } from "./crypto";
 import { IMAP_PORT, type ImapCredentials } from "./imap";
 import { OAuthError, getOAuthProvider } from "./oauth";
@@ -134,6 +134,13 @@ export async function disconnectMailbox(mailbox: string, opts: { wipe: boolean }
   await getDb().transaction(async (tx) => {
     if (opts.wipe) {
       await tx.delete(accounts).where(eq(accounts.mailbox, mailbox));
+      // The review log refers to newsletters by id, so it goes first.
+      await tx.delete(actions).where(
+        and(
+          eq(actions.targetType, "newsletter"),
+          inArray(actions.targetId, tx.select({ id: sql<string>`${newsletters.id}::text` }).from(newsletters).where(eq(newsletters.mailbox, mailbox))),
+        ),
+      );
       await tx.delete(newsletters).where(eq(newsletters.mailbox, mailbox));
       await tx.delete(messagesSeen).where(eq(messagesSeen.mailbox, mailbox));
       await tx.delete(scans).where(eq(scans.mailbox, mailbox));

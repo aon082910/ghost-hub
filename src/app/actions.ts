@@ -6,6 +6,7 @@ import { ImapConnectError, parseImapForm, verifyImapLogin } from "@/lib/imap";
 import { disconnectMailbox, findConnection, saveConnection } from "@/lib/mailboxes";
 import { HibpError } from "@/lib/breaches/hibp";
 import { HibpDisabledError, HibpKeyMissingError, checkMailboxBreaches, refreshCatalog } from "@/lib/breaches/store";
+import { approvePending, markUnsubscribedManually, queueUnsubscribes, rejectPending, setKept } from "@/lib/newsletters/store";
 import { cancelScan, startScan } from "@/lib/scan/registry";
 
 export type ConnectImapState = { error?: string };
@@ -96,4 +97,59 @@ export async function checkMailbox(formData: FormData) {
     target = `/dashboard?error=${breachErrorCode(err)}`;
   }
   redirect(target);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Every string value submitted under `name` that is a well-formed id. Nothing else from the form is trusted. */
+const ids = (formData: FormData, name: string) =>
+  formData.getAll(name).filter((v): v is string => typeof v === "string" && UUID.test(v));
+
+/** Stage the selected senders for review. Sends nothing. */
+export async function queueForReview(formData: FormData) {
+  await requireSession();
+  const selected = ids(formData, "select");
+  if (selected.length === 0) redirect("/newsletters?error=nothing_selected");
+  const { queued, skipped } = await queueUnsubscribes(selected);
+  if (queued === 0) redirect(`/newsletters?error=nothing_queued&skipped=${skipped.length}`);
+  redirect("/newsletters/review");
+}
+
+/** Approve exactly the items the user was shown on the review page, then send them. */
+export async function approveReviewed(formData: FormData) {
+  await requireSession();
+  const shown = ids(formData, "action");
+  if (shown.length === 0) redirect("/newsletters");
+  const { succeeded, failed } = await approvePending({ actionIds: shown });
+  redirect(`/newsletters?unsubscribed=${succeeded}&failed=${failed}`);
+}
+
+/**
+ * The id arrives bound to the action (`action.bind(null, id)`), not through the form: a button's own name and value
+ * aren't included in the submission when it uses `formAction`. It is still validated like any other input.
+ */
+export async function removeFromReview(actionId: string) {
+  await requireSession();
+  if (UUID.test(actionId)) await rejectPending([actionId]);
+  redirect("/newsletters/review");
+}
+
+export async function cancelReview() {
+  await requireSession();
+  await rejectPending();
+  redirect("/newsletters");
+}
+
+/** The user unsubscribed themselves (opened the link, or sent the email) and wants it recorded. */
+export async function markUnsubscribed(newsletterId: string) {
+  await requireSession();
+  if (UUID.test(newsletterId)) await markUnsubscribedManually(newsletterId);
+  redirect("/newsletters");
+}
+
+/** Hide a sender from cleanup (`kept` true) or put it back. */
+export async function keepSender(newsletterId: string, kept: boolean) {
+  await requireSession();
+  if (UUID.test(newsletterId)) await setKept(newsletterId, kept);
+  redirect("/newsletters");
 }

@@ -4,6 +4,7 @@ import { logout } from "./login/actions";
 const NAV = [
   { href: "/", label: "Mailboxes" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/newsletters", label: "Newsletters" },
 ] as const;
 
 /** Title, navigation and sign-out shared by every signed-in page. */

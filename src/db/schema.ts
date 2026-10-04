@@ -88,6 +88,8 @@ export const newsletters = pgTable(
     messageCount: integer("message_count").notNull().default(1),
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
     status: text("status").notNull().default("subscribed"), // subscribed | unsubscribed | failed | ignored
+    /** When Ghost-Hub (or the user, by hand) unsubscribed. Mail after this means the sender is ignoring it. */
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
   },
   (t) => [unique("newsletters_mailbox_sender").on(t.mailbox, t.senderEmail)],
 );
