@@ -29,9 +29,9 @@ const EXPOSURE_LABEL = {
 } as const;
 
 const MESSAGES: Record<string, string> = {
-  hibp_disabled: "Have I Been Pwned lookups are turned off (HIBP_ENABLED=false).",
-  hibp_key_missing: "Set HIBP_API_KEY to check your own addresses.",
-  hibp_key_rejected: "Have I Been Pwned rejected the API key. Check HIBP_API_KEY.",
+  hibp_disabled: "Have I Been Pwned lookups are turned off in Settings.",
+  hibp_key_missing: "Add a Have I Been Pwned API key in Settings to check your own addresses.",
+  hibp_key_rejected: "Have I Been Pwned rejected the API key. Check it in Settings.",
   hibp_rate: "Have I Been Pwned is rate limiting requests. Wait a minute and try again.",
   hibp_failed: "Couldn't reach Have I Been Pwned. Try again in a moment; see the server logs for details.",
 };
@@ -268,8 +268,11 @@ function BreachPanel({
       <h2 className="font-medium text-zinc-100">Breach data</h2>
       {!status.enabled ? (
         <p className="mt-1 text-sm text-zinc-400">
-          Breach lookups are turned off (<code>HIBP_ENABLED=false</code>), so Ghost-Hub makes no calls to Have I Been Pwned. Scores use only
-          how you use each service.
+          Breach lookups are turned off in{" "}
+          <Link href="/settings#breach" className="text-emerald-400 underline">
+            Settings
+          </Link>
+          , so Ghost-Hub makes no calls to Have I Been Pwned. Scores use only how you use each service.
         </p>
       ) : (
         <>
@@ -318,8 +321,12 @@ function BreachPanel({
               </>
             ) : (
               <p className="mt-1 text-xs text-zinc-500">
-                Optional: set <code>HIBP_API_KEY</code> (a paid key from haveibeenpwned.com/API/Key) to check whether your own addresses appear
-                in breaches. That confirms which breaches really affected you instead of estimating from dates.
+                Optional: add a Have I Been Pwned API key in{" "}
+                <Link href="/settings#breach" className="text-emerald-400 underline">
+                  Settings
+                </Link>{" "}
+                (a paid key from haveibeenpwned.com/API/Key) to check whether your own addresses appear in breaches. That confirms which breaches really
+                affected you instead of estimating from dates.
               </p>
             )}
           </div>

@@ -11,17 +11,19 @@ import { isScanning, latestScan } from "@/lib/scan/registry";
 import { cancelMailboxScan, disconnect, scanMailbox } from "./actions";
 import { ImapForm } from "./imap-form";
 import { ScanProgress } from "./scan-progress";
+import { googleConfig, microsoftConfig } from "@/lib/config";
+import { ensureSettingsLoaded } from "@/lib/settings";
 import { SiteHeader } from "./site-header";
 
 const ERRORS: Record<string, string> = {
-  not_configured: "That provider isn't configured. Set its client ID and secret (see the docs folder), then restart.",
+  not_configured: "That provider isn't set up yet. Add its client ID and secret on the Settings page.",
   unknown_provider: "Unknown provider.",
   access_denied: "Sign-in was cancelled or denied.",
   state_mismatch: "That sign-in attempt expired or didn't match. Please try connecting again.",
   scope_missing: "Ghost-Hub needs permission to read your mail. Connect again and leave the mail permission ticked.",
   no_refresh_token:
     "The provider didn't return a long-lived token. Remove Ghost-Hub from your account's app permissions, then connect again.",
-  exchange_failed: "Couldn't complete the sign-in. Check the server logs and your OAuth app settings.",
+  exchange_failed: "Couldn't complete the sign-in. Check the client ID, secret and redirect address on the Settings page.",
 };
 
 const PROVIDER_NAME: Record<string, string> = { google: "Gmail", microsoft: "Outlook", imap: "IMAP" };
@@ -65,7 +67,12 @@ export default async function Home(props: PageProps<"/">) {
   await requireSession();
   const [sp, connections] = await Promise.all([props.searchParams, listConnections()]);
   const note = banner(sp);
-  const setup = setupNotes(getEnv());
+  await ensureSettingsLoaded();
+  const setup = setupNotes({
+    ...getEnv(),
+    GOOGLE_CLIENT_ID: googleConfig().clientId.value,
+    MICROSOFT_CLIENT_ID: microsoftConfig().clientId.value,
+  });
   const scansByMailbox = new Map(await Promise.all(connections.map(async (c) => [c.mailbox, await latestScan(c.mailbox)] as const)));
   const summary = summarize((await loadServices()).filter((s) => s.state === "active" && !s.spamOnly));
   const oauthButtons = Object.values(OAUTH_PROVIDERS).map((p) => ({
@@ -174,7 +181,10 @@ export default async function Home(props: PageProps<"/">) {
               </a>
             ) : (
               <span key={p.id} className="rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-500">
-                {PROVIDER_NAME[p.id]}: set up docs/SETUP-{p.id.toUpperCase()}-OAUTH.md
+                {PROVIDER_NAME[p.id]}:{" "}
+                <Link href={`/settings#${p.id}`} className="text-emerald-400 underline">
+                  set it up in Settings
+                </Link>
               </span>
             ),
           )}

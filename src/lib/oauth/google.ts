@@ -1,4 +1,4 @@
-import { getEnv } from "../env";
+import { googleCredentials } from "../config";
 import { OAuthError, createOAuthProvider, devOverride, type FetchLike } from "./core";
 
 /** The only scope requested. It also lets us read the mailbox address via users/me/profile. */
@@ -18,12 +18,7 @@ export const google = createOAuthProvider({
     prompt: "consent", // Google only returns a refresh token on consent
     include_granted_scopes: "false",
   },
-  credentials() {
-    const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = getEnv();
-    return GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET
-      ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET }
-      : null;
-  },
+  credentials: googleCredentials,
   endpoints: () => ({
     auth: devOverride("GOOGLE_AUTH_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
     token: devOverride("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),

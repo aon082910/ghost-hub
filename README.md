@@ -61,7 +61,11 @@ you if your setup would break sign-in.
 
 ## Configuration
 
-Set these in `.env` (Docker Compose) or in the Unraid template.
+The four that Ghost-Hub needs before it can start (`APP_URL`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY`, `DATABASE_URL`) go in `.env`
+(Docker Compose) or the Unraid template. **Everything for Gmail, Outlook and breach checks can instead be entered on the
+Settings page in the app**, with nothing to edit or restart. A value saved there wins over the same variable below,
+secrets are stored encrypted and never shown again, and removing it falls back to the variable, so the variables remain
+a fine way to set things up ahead of time.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|

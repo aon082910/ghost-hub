@@ -6,6 +6,9 @@ export async function startup() {
     getEnv();
     const { runMigrations } = await import("./db/migrate");
     await runMigrations();
+    // Credentials saved on the Settings page; read once here so the rest of the code can use them synchronously.
+    const { loadSettings } = await import("./lib/settings");
+    await loadSettings();
     const { markInterruptedScans } = await import("./lib/scan/registry");
     await markInterruptedScans();
   } catch (err) {

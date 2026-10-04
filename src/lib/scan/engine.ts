@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { accounts, messagesSeen, newsletters, scans } from "@/db/schema";
 import { OAuthError } from "../oauth";
 import { CERTIFICATE_HELP, isCertificateError } from "../tls-errors";
+import { ScanHttpError } from "./http";
 import { CATEGORY_RANK, classify, serviceName, type Category } from "./classify";
 import type { MailSource, MessageHeader } from "./types";
 
@@ -159,11 +160,31 @@ export async function savePage(tx: Tx, mailbox: string, page: MessageHeader[], n
   }
 }
 
+const NOT_ENABLED = new Set(["SERVICE_DISABLED", "accessNotConfigured"]);
+const NOT_PERMITTED = new Set(["ACCESS_TOKEN_SCOPE_INSUFFICIENT", "insufficientPermissions", "ErrorAccessDenied", "Authorization_RequestDenied", "ErrorInsufficientPermissionToAccess"]);
+
+/** Turn a refused Gmail or Graph request into something a person can act on. */
+function describeHttpError(err: ScanHttpError): string {
+  const { reason, message, activationUrl } = err.info;
+  if (err.status === 403 && reason && NOT_ENABLED.has(reason)) {
+    return `The Gmail API is switched off for your Google Cloud project. Turn it on${
+      activationUrl ? ` at ${activationUrl}` : " (APIs & Services, Library, Gmail API, Enable)"
+    }, wait a minute, then scan again.`;
+  }
+  if ((err.status === 403 || err.status === 401) && reason && NOT_PERMITTED.has(reason)) {
+    return "Ghost-Hub wasn't allowed to read this mailbox. Disconnect it and connect again, and tick the permission to read your email when asked.";
+  }
+  if (err.status === 401) return "The mail service rejected the saved login. Disconnect this mailbox and connect it again.";
+  const detail = [reason, message].filter(Boolean).join(": ");
+  return `The mail service refused the request (HTTP ${err.status}${detail ? `, ${detail}` : ""}).`;
+}
+
 /** A short, user-facing reason a scan stopped. Never includes credentials. */
 export function describeScanError(err: unknown): string {
   if (err instanceof OAuthError && err.code === "invalid_grant") {
     return "Your connection expired or was revoked. Reconnect this mailbox, then scan again.";
   }
+  if (err instanceof ScanHttpError) return describeHttpError(err);
   const e = err as { authenticationFailed?: boolean; code?: string; name?: string; message?: string };
   if (e?.name === "TimeoutError") return "The mail server took too long to respond. Try again; scanning continues where it stopped.";
   if (e?.authenticationFailed) return "The mail server rejected the saved login. Reconnect this mailbox with a new app password.";

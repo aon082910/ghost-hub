@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { scans } from "@/db/schema";
 import { ensureFreshCatalog } from "../breaches/store";
+import { ensureSettingsLoaded } from "../settings";
 import { describeScanError, runScan } from "./engine";
 import { createSource } from "./sources";
 
@@ -33,6 +34,7 @@ export async function startScan(mailbox: string, opts: { since?: Date; includeJu
 
   void (async () => {
     try {
+      await ensureSettingsLoaded();
       const source = await createSource(mailbox);
       const outcome = await runScan({ scanId: entry.scanId, mailbox, source, signal: entry.controller.signal, since: opts.since, includeJunk: opts.includeJunk });
       // New services were just found, so make sure there's a recent breach list to score them against.

@@ -2,6 +2,9 @@
 
 Ghost-Hub reads your Gmail using an OAuth client that **you** own. One-time setup, ~5 minutes.
 
+> **Easiest:** do the steps below, then paste the values on the **Settings** page in Ghost-Hub. Nothing to edit, no restart. The
+> `.env` lines in the steps are an alternative; a value saved in Settings wins over them.
+
 1. Go to <https://console.cloud.google.com/> and create a project (e.g. "Ghost-Hub").
 2. **APIs & Services → Library** → enable the **Gmail API**.
 3. **APIs & Services → OAuth consent screen** (Google Auth Platform):
@@ -12,7 +15,8 @@ Ghost-Hub reads your Gmail using an OAuth client that **you** own. One-time setu
    - Type: **Web application**.
    - Authorized redirect URI: `<APP_URL>/api/auth/google/callback`
      (see [Redirect URIs need HTTPS](#redirect-uris-need-https) below).
-5. Copy the client ID and secret into `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+5. Copy the client ID and secret into the Settings page (Gmail section), or into `.env` as `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`.
 
 ## Redirect URIs need HTTPS
 
@@ -26,6 +30,11 @@ Google only accepts `http://` redirect URIs for `localhost`, and rejects bare IP
 
 `APP_URL` must be exactly the address you use in the browser, and the redirect URI you register must match it.
 
+## "HTTP 403" when scanning
+
+Almost always the Gmail API isn't switched on for your project (step 2). Ghost-Hub shows Google's own reason and a link to switch
+it on. The other cause is the Gmail permission being unticked on Google's consent screen: disconnect, connect again and tick it.
+
 ## Refresh tokens expiring after 7 days
 
 While the consent screen is in **Testing** status, Google expires refresh tokens after 7 days. For a personal
@@ -34,7 +43,7 @@ app, go to **OAuth consent screen → Publish app** (status "In production"). It
 
 ## Connecting
 
-Restart Ghost-Hub after setting the two variables, sign in, and click **Connect Gmail** on the home page.
+If you used `.env`, restart Ghost-Hub first. Then click **Connect Gmail** on the Mailboxes page.
 Ghost-Hub asks for one scope only, `gmail.readonly`, and uses it to read your mailbox address and (in the next
 milestone) message headers. If Google's consent screen shows the Gmail permission as an unticked box, tick it —
 Ghost-Hub can't work without it.

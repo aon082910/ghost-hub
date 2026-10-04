@@ -180,3 +180,10 @@ export const actions = pgTable("actions", {
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   executedAt: timestamp("executed_at", { withTimezone: true }),
 });
+
+/** Settings saved from the Settings page (provider credentials and the like). Secret values are stored encrypted. */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

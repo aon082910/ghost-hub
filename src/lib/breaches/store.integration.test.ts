@@ -137,7 +137,7 @@ describe.skipIf(!url)("breach store and dashboard (integration)", () => {
     delete process.env.HIBP_API_KEY;
     envMod.resetEnvCache();
     try {
-      await expect(store.checkMailboxBreaches(ME)).rejects.toThrow(/No HIBP_API_KEY/);
+      await expect(store.checkMailboxBreaches(ME)).rejects.toThrow(/No Have I Been Pwned API key/);
     } finally {
       process.env.HIBP_API_KEY = key;
       envMod.resetEnvCache();

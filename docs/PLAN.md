@@ -97,6 +97,13 @@ published on GitHub so others can host their own.
   so Markdown output escapes every formatting, HTML and link character and CSV cells that start like a formula get a
   leading apostrophe (`src/lib/checklist.ts`). Nothing is fetched; links are the company's own domain and the bundled
   deletion guide.
+- **Settings page:** provider credentials and the HIBP key live in a `settings` table (`src/lib/settings.ts`). Secrets are
+  encrypted with the same AES-256-GCM key as mailbox tokens and the page never receives them: a secret box is always empty,
+  and leaving it blank keeps what is saved. They are read into memory at start-up and after each save (on `globalThis`, so
+  the rest of the code stays synchronous), and `src/lib/config.ts` picks a saved value over the environment, field by field.
+  Unknown keys are ignored, every value is validated before any is written, and a secret saved under a different
+  `ENCRYPTION_KEY` is reported as unreadable and treated as unset. `APP_URL`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY` and
+  `DATABASE_URL` stay in the environment because Ghost-Hub needs them to start.
 - **Start over:** ticking "Start over" before a scan zeroes the mailbox's counts, forgets which messages were seen and
   clears its scan history, then rescans. Rows are kept, so decisions (deleted / kept / unsubscribed) survive, and a row
   with no messages is hidden until a scan finds it again. It's refused while a scan is running. Older data has no spam

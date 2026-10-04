@@ -2,27 +2,27 @@ import { eq, lt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { breachChecks, breaches, mailboxBreaches } from "@/db/schema";
 import { chunk } from "../scan/http";
-import { getEnv } from "../env";
+import { hibpApiKey, hibpEnabled as hibpEnabledSetting } from "../config";
 import { findConnection } from "../mailboxes";
 import { fetchCatalog, fetchMailboxBreaches, type Breach } from "./hibp";
 
 export class HibpDisabledError extends Error {
   constructor() {
-    super("Have I Been Pwned lookups are turned off (HIBP_ENABLED=false)");
+    super("Have I Been Pwned lookups are turned off in Settings");
     this.name = "HibpDisabledError";
   }
 }
 export class HibpKeyMissingError extends Error {
   constructor() {
-    super("No HIBP_API_KEY is configured");
+    super("No Have I Been Pwned API key is saved in Settings");
     this.name = "HibpKeyMissingError";
   }
 }
 
 const STALE_MS = 7 * 86_400_000;
 
-export const hibpEnabled = () => getEnv().HIBP_ENABLED;
-export const hibpKeyConfigured = () => Boolean(getEnv().HIBP_API_KEY);
+export const hibpEnabled = () => hibpEnabledSetting();
+export const hibpKeyConfigured = () => Boolean(hibpApiKey());
 
 type Deps = { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> };
 
@@ -121,7 +121,7 @@ export async function ensureFreshCatalog(deps: Deps = {}): Promise<void> {
  */
 export async function checkMailboxBreaches(mailbox: string, deps: Deps = {}): Promise<{ breachCount: number }> {
   if (!hibpEnabled()) throw new HibpDisabledError();
-  const key = getEnv().HIBP_API_KEY;
+  const key = hibpApiKey();
   if (!key) throw new HibpKeyMissingError();
   if (!(await findConnection(mailbox))) throw new Error(`No connection for ${mailbox}`);
 
