@@ -58,7 +58,8 @@ published on GitHub so others can host their own.
    against a fake set of sites, and the bundled list against the real internet (30 of 31 candidate sites passed; the
    one that blocks automated requests was dropped).
 7. **Value recovery** — detect gift cards/coupons/rewards in receipts and promos.
-8. **Polish** — deletion guides, Unraid Community Apps template, release docs.
+8. **Polish** — *deletion guides: done* (see "How deleting accounts works"); Unraid Community Apps template polish, release docs,
+   and a decision on value recovery (milestone 7) remain.
 
 ## How scanning works
 
@@ -148,6 +149,27 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
 - **Development only**: `GHOSTHUB_PROFILE_SITES_FILE` (a different site list) and `GRAVATAR_API_URL` let a local fake be
   used. They're ignored in production builds, like `GHOSTHUB_ALLOW_PRIVATE_TARGETS`.
 
+## How deleting accounts works
+
+- **Guides** come from the JustDeleteMe dataset (MIT, 2,664 services), slimmed to English text, the deletion page, a
+  difficulty (easy / medium / hard / not offered / depends where you live), the domains it covers and, where the company
+  takes requests by email, the address plus a request template. It's bundled in `src/lib/deletion/guides.json` and
+  refreshed by `npm run guides:update` (fetches upstream, validates the shape, refuses to overwrite with a short list).
+  Review the diff before committing: it's community data. Attribution lives in `docs/THIRD-PARTY.md`.
+- **Matching** is by registrable domain, indexed from every domain an entry lists. A guide that lists the exact domain
+  comes first, and at most three are shown. Services with no guide get a generic hint and a search link.
+- **Untrusted text**: dataset content is validated on load and only shown as plain text and links. A link is only offered
+  if it's a plain `https` URL (17 entries are `http` and get no link, with an explanation); notes have HTML stripped and
+  only `[text](https://...)` becomes a link; an email address must be a plain address, and the mail link is built with
+  encoded subject and body for the user's own mail app. Ghost-Hub sends nothing.
+- **Decisions**: `I've deleted it`, `Keep it` and `Put it back` set `accounts.status` for that domain in every mailbox and
+  stamp `deleted_at`. Deleting and restoring each leave an audit row in `actions`; "keep" doesn't. A service shows as
+  deleted or kept only when every mailbox agrees, so a mailbox added later that still has it brings it back. Scans never
+  touch the status.
+- **Verification**: a deleted service whose latest email is more than 3 days after `deleted_at` is flagged "Still
+  emailing", the same signal as for newsletters. Ghost-Hub can't tell whether the account or only a mailing list remains.
+- **Wipe**: wiping a mailbox removes audit rows for services no other mailbox still has.
+
 ## Gotchas
 
 - A `<button formAction={fn}>` inside a form doesn't submit its own `name`/`value`. Row-level buttons bind their id
@@ -162,6 +184,8 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
 - Breaches are matched by domain only, so a service that changed domains, or HIBP entries without a domain, are missed.
 - The per-address HIBP check only covers connected mailboxes, not other addresses or phone numbers.
 - Senders that offer only a web link or `mailto:` are never automated, by design.
+- Deletion guides are only as current as the dataset; some links go stale. Nothing verifies that a guide still works.
+- Ghost-Hub can't tell whether a deleted account is really gone, only whether the company keeps emailing.
 - Profile checks cover ~30 sites. Big social networks (X, Instagram, Facebook, TikTok, LinkedIn, Reddit) aren't included
   because they block automated requests or show a page that doesn't reveal whether a profile exists.
 - Usernames are stored lowercase, so sites that treat case as significant may give a different answer for the original.

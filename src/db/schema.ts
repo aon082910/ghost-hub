@@ -71,6 +71,8 @@ export const accounts = pgTable(
     messageCount: integer("message_count").notNull().default(1),
     deletionUrl: text("deletion_url"),
     status: text("status").notNull().default("active"), // active | ignored | deleted
+    /** When the user marked the account deleted. Mail after this means the company is still emailing. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [unique("accounts_mailbox_domain").on(t.mailbox, t.domain)],
 );

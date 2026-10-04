@@ -8,6 +8,7 @@ import { HibpError } from "@/lib/breaches/hibp";
 import { HibpDisabledError, HibpKeyMissingError, checkMailboxBreaches, refreshCatalog } from "@/lib/breaches/store";
 import { approvePending, markUnsubscribedManually, queueUnsubscribes, rejectPending, setKept } from "@/lib/newsletters/store";
 import { cancelProfileScan, startProfileScan } from "@/lib/profiles/runner";
+import { setServiceStatus } from "@/lib/deletion/store";
 import { addUsername, removeUsername } from "@/lib/profiles/store";
 import { cancelScan, startScan } from "@/lib/scan/registry";
 
@@ -183,4 +184,28 @@ export async function cancelProfileCheck() {
   await requireSession();
   cancelProfileScan();
   redirect("/profiles");
+}
+
+/**
+ * The user deleted the account themselves (Ghost-Hub never does) and is recording it. The domain is bound to the
+ * action rather than read from the form, and validated again before it touches the database.
+ */
+export async function markServiceDeleted(domain: string) {
+  await requireSession();
+  await setServiceStatus(domain, "deleted");
+  redirect("/dashboard");
+}
+
+/** Hide a service from cleanup because the user wants to keep the account. */
+export async function keepService(domain: string) {
+  await requireSession();
+  await setServiceStatus(domain, "ignored");
+  redirect("/dashboard");
+}
+
+/** Put a deleted or kept service back on the active list. */
+export async function restoreService(domain: string) {
+  await requireSession();
+  await setServiceStatus(domain, "active");
+  redirect("/dashboard");
 }

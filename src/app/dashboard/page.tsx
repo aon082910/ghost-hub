@@ -1,11 +1,12 @@
 import Link from "next/link";
 import type { AssessedBreach, Level } from "@/lib/breaches/risk";
 import { catalogStatus, loadChecks } from "@/lib/breaches/store";
-import { LEVELS, filterServices, isLevel, loadServices, summarize, type ServiceRisk } from "@/lib/dashboard";
+import { LEVELS, decisionCounts, filterServices, isLevel, isShow, loadServices, summarize, type ServiceRisk, type Show } from "@/lib/dashboard";
+import { DIFFICULTY_HINT, DIFFICULTY_LABEL, guidesFor, type Difficulty } from "@/lib/deletion/guides";
 import { CATEGORIES, isCategory } from "@/lib/discovered";
 import { requireSession } from "@/lib/auth";
 import { listConnections } from "@/lib/mailboxes";
-import { checkMailbox, refreshBreaches } from "../actions";
+import { checkMailbox, keepService, markServiceDeleted, refreshBreaches, restoreService } from "../actions";
 import { SiteHeader } from "../site-header";
 
 const SHOW_LIMIT = 200;
@@ -67,17 +68,22 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
   const cat = isCategory(one(sp, "cat")) ? (one(sp, "cat") as keyof typeof CATEGORY_LABEL) : undefined;
   const level = isLevel(one(sp, "risk")) ? (one(sp, "risk") as Level) : undefined;
   const breachedOnly = one(sp, "breached") === "1";
+  const show: Show = isShow(one(sp, "show")) ? (one(sp, "show") as Show) : "active";
 
   const [all, status, connections, checks] = await Promise.all([loadServices(), catalogStatus(), listConnections(), loadChecks()]);
-  const summary = summarize(all);
-  const shown = filterServices(all, { category: cat, level, breachedOnly });
+  // The tiles and type counts describe what's still on your list; the decisions you've made are counted separately.
+  const summary = summarize(all.filter((s) => s.state === "active"));
+  const decisions = decisionCounts(all);
+  const shown = filterServices(all, { category: cat, level, breachedOnly, show });
   const note = banner(sp);
 
-  const href = (next: { cat?: string; risk?: string; breached?: boolean }) => {
+  const href = (next: { cat?: string; risk?: string; breached?: boolean; show?: Show }) => {
     const p = new URLSearchParams();
     const c = "cat" in next ? next.cat : cat;
     const r = "risk" in next ? next.risk : level;
     const b = "breached" in next ? next.breached : breachedOnly;
+    const sh = "show" in next ? next.show : show;
+    if (sh && sh !== "active") p.set("show", sh);
     if (c) p.set("cat", c);
     if (r) p.set("risk", r);
     if (b) p.set("breached", "1");
@@ -117,12 +123,37 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
             <Tile label="Known breach" value={summary.breached} />
             <Tile label="Forgotten" value={summary.dormant} hint="No email in 2+ years" />
           </section>
+          {(decisions.deleted > 0 || decisions.kept > 0) && (
+            <p className="-mt-3 mb-6 text-xs text-zinc-500">
+              {decisions.deleted} deleted · {decisions.kept} kept
+              {decisions.stillEmailing > 0 && (
+                <span className="text-amber-400">
+                  {" "}
+                  · {decisions.stillEmailing} still emailing you after you deleted {decisions.stillEmailing === 1 ? "it" : "them"}
+                </span>
+              )}
+            </p>
+          )}
 
           <BreachPanel status={status} connections={connections} checks={checks} />
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
             <h2 className="font-medium text-zinc-100">Your services</h2>
             <div className="mt-3 space-y-2" aria-label="Filters">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["active", `To review (${decisions.active})`],
+                    ["deleted", `Deleted (${decisions.deleted})`],
+                    ["kept", `Kept (${decisions.kept})`],
+                    ["all", "All"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <Link key={id} href={href({ show: id })} className={chip(show === id)}>
+                    {label}
+                  </Link>
+                ))}
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Link href={href({ cat: undefined })} className={chip(!cat)}>
                   All types
@@ -270,6 +301,11 @@ function ServiceRow({ s }: { s: ServiceRisk }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {s.state !== "active" && (
+              <span className={`text-[10px] uppercase tracking-wide ${s.stillEmailing ? "text-amber-400" : "text-zinc-500"}`}>
+                {s.stillEmailing ? "Still emailing" : s.state === "deleted" ? "Deleted" : "Kept"}
+              </span>
+            )}
             {s.risk.breaches.length > 0 && (
               <span className="text-[10px] uppercase tracking-wide text-zinc-500">
                 {s.risk.breaches.length} breach{s.risk.breaches.length === 1 ? "" : "es"}
@@ -309,6 +345,8 @@ function ServiceRow({ s }: { s: ServiceRisk }) {
               </ul>
             </div>
           )}
+
+          <DeleteSection s={s} />
         </div>
       </details>
     </li>
@@ -338,5 +376,113 @@ function BreachItem({ b }: { b: AssessedBreach }) {
         {!b.isVerified && " · unverified"}
       </div>
     </li>
+  );
+}
+
+const DIFFICULTY_STYLE: Record<Difficulty, string> = {
+  easy: "border-emerald-900 bg-emerald-950/40 text-emerald-300",
+  medium: "border-amber-900 bg-amber-950/40 text-amber-300",
+  hard: "border-red-900 bg-red-950/40 text-red-300",
+  impossible: "border-red-900 bg-red-950/40 text-red-300",
+  limited: "border-zinc-800 bg-zinc-900 text-zinc-400",
+};
+
+const smallBtn = "rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500";
+
+/** How to delete the account, and the buttons to record what you decided. Ghost-Hub never deletes anything itself. */
+function DeleteSection({ s }: { s: ServiceRisk }) {
+  const guides = guidesFor(s.domain);
+  return (
+    <div>
+      <div className="mb-1 font-medium text-zinc-300">Delete this account</div>
+
+      {s.stillEmailing && s.deletedAt && (
+        <p className="mb-2 text-amber-400">
+          You marked this deleted on {fmtDate(s.deletedAt)}, but it has emailed you since (latest {fmtDate(s.lastSeen)}). The account may not have been
+          deleted, or the company still has you on a mailing list. Check the steps below, then ask them to remove you.
+        </p>
+      )}
+
+      {guides.length === 0 ? (
+        <p>
+          There&apos;s no step-by-step guide for this service yet. Look for &quot;Delete account&quot; or &quot;Close account&quot; in its account
+          settings, or{" "}
+          <a
+            href={`https://duckduckgo.com/?q=${encodeURIComponent(`how to delete ${s.name} account`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 underline"
+          >
+            search for how
+          </a>
+          .
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {guides.map((g) => (
+            <li key={g.name + (g.openUrl ?? "")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-zinc-200">{g.name}</span>
+                <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${DIFFICULTY_STYLE[g.difficulty]}`} title={DIFFICULTY_HINT[g.difficulty]}>
+                  {DIFFICULTY_LABEL[g.difficulty]}
+                </span>
+              </div>
+              <p className="mt-0.5 text-zinc-500">{DIFFICULTY_HINT[g.difficulty]}</p>
+              {g.notes.length > 0 && (
+                <p className="mt-1">
+                  {g.notes.map((seg, i) =>
+                    seg.href ? (
+                      <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
+                        {seg.text}
+                      </a>
+                    ) : (
+                      <span key={i}>{seg.text}</span>
+                    ),
+                  )}
+                </p>
+              )}
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                {g.openUrl && (
+                  <a href={g.openUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
+                    Open the deletion page
+                  </a>
+                )}
+                {g.mailto && (
+                  <a href={g.mailto} className="text-emerald-400 underline">
+                    Email a deletion request
+                  </a>
+                )}
+                {g.insecure && (
+                  <span className="text-amber-400">
+                    Only an insecure (http) address is published, so no link is offered. Search for the company&apos;s support page.
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-zinc-500">
+        Ghost-Hub can&apos;t delete accounts for you. Do it on the company&apos;s site, then record it here. After your next scan, it will tell you if they keep
+        emailing.
+      </p>
+
+      <form className="mt-2 flex flex-wrap gap-2">
+        {s.state === "active" ? (
+          <>
+            <button formAction={markServiceDeleted.bind(null, s.domain)} className={smallBtn}>
+              I&apos;ve deleted it
+            </button>
+            <button formAction={keepService.bind(null, s.domain)} className={smallBtn} title="Hide this from cleanup">
+              Keep it
+            </button>
+          </>
+        ) : (
+          <button formAction={restoreService.bind(null, s.domain)} className={smallBtn}>
+            {s.state === "deleted" ? "I haven't deleted it, put it back" : "Stop keeping it"}
+          </button>
+        )}
+      </form>
+    </div>
   );
 }

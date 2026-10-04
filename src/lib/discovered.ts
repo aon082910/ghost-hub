@@ -12,6 +12,8 @@ export function isCategory(v: string | undefined): v is Category {
 const RANK_SQL = sql`(case ${accounts.category} when 'account' then 4 when 'subscription' then 3 when 'receipt' then 2 else 1 end)`;
 const RANK_TO_CATEGORY: Record<number, Category> = { 4: "account", 3: "subscription", 2: "receipt", 1: "newsletter" };
 
+export type ServiceState = "active" | "deleted" | "ignored";
+
 export type DiscoveredService = {
   domain: string;
   name: string;
@@ -20,6 +22,9 @@ export type DiscoveredService = {
   firstSeen: Date;
   lastSeen: Date;
   mailboxes: number;
+  /** "deleted" or "ignored" only when every mailbox's record of it says so. */
+  state: ServiceState;
+  deletedAt: Date | null;
 };
 
 /** Services found across every connected mailbox, one row per domain, strongest evidence first. */
@@ -34,6 +39,8 @@ export async function listDiscovered(category?: Category, limit = 300): Promise<
       firstSeen: sql<Date>`min(${accounts.firstSeen})`,
       lastSeen: sql<Date>`max(${accounts.lastSeen})`,
       mailboxes: sql<number>`count(distinct ${accounts.mailbox})::int`,
+      state: sql<ServiceState>`case when bool_and(${accounts.status} = 'deleted') then 'deleted' when bool_and(${accounts.status} = 'ignored') then 'ignored' else 'active' end`,
+      deletedAt: sql<Date | null>`max(${accounts.deletedAt})`,
     })
     .from(accounts)
     .groupBy(accounts.domain)
@@ -49,6 +56,8 @@ export async function listDiscovered(category?: Category, limit = 300): Promise<
     firstSeen: new Date(r.firstSeen),
     lastSeen: new Date(r.lastSeen),
     mailboxes: r.mailboxes,
+    state: r.state,
+    deletedAt: r.deletedAt ? new Date(r.deletedAt) : null,
   }));
 }
 

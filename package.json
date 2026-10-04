@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "guides:update": "node scripts/update-deletion-guides.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",

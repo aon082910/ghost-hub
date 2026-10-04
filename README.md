@@ -15,8 +15,10 @@ on your own hardware, with your own OAuth credentials. Your email never goes to 
    email addresses (see "Profiles" below).
 3. **Dashboard** — every service in one list, scored 0-100 for risk with a plain explanation of why. Scores combine how
    you use the service, how long since it last emailed you, and known breaches of it (Have I Been Pwned's public list).
-4. **Act** — review-first bulk newsletter unsubscribe (deletion guides are planned). Nothing happens without your
-   approval.
+4. **Act** — review-first bulk newsletter unsubscribe, and step-by-step guides for deleting the accounts you don't
+   need (a direct link, how hard it is, and a ready-made email request where the company takes them). Ghost-Hub never
+   deletes an account for you: you do it, record it, and after your next scan it tells you if they keep emailing.
+   Nothing happens without your approval.
 
 ## Privacy model
 
@@ -79,6 +81,14 @@ database and set `TEST_DATABASE_URL` to it before `npm test` (they're skipped ot
 ## Stack
 
 Next.js (App Router) · TypeScript · Tailwind CSS · PostgreSQL (Drizzle ORM) · Docker
+
+## Deleting accounts
+
+Open a service on the Dashboard to see how to delete it. The guides come from the community-maintained
+[JustDeleteMe](https://github.com/jdm-contrib/jdm) dataset (MIT licensed, see [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)),
+which is bundled with Ghost-Hub, so looking one up makes no network request. Links open in your own browser when you
+click them. After you've deleted an account, press **I've deleted it**; Ghost-Hub keeps a record, and if a later scan sees
+more email from that company it flags **Still emailing**. Refresh the guides with `npm run guides:update`.
 
 ## Profiles
 

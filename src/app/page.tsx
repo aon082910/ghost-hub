@@ -63,7 +63,7 @@ export default async function Home(props: PageProps<"/">) {
   const [sp, connections] = await Promise.all([props.searchParams, listConnections()]);
   const note = banner(sp);
   const scansByMailbox = new Map(await Promise.all(connections.map(async (c) => [c.mailbox, await latestScan(c.mailbox)] as const)));
-  const summary = summarize(await loadServices());
+  const summary = summarize((await loadServices()).filter((s) => s.state === "active"));
   const oauthButtons = Object.values(OAUTH_PROVIDERS).map((p) => ({
     id: p.id,
     label: p.label,

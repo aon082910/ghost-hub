@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, actions, breachChecks, mailboxBreaches, mailboxConnections, messagesSeen, newsletters, scans, shadowProfiles } from "@/db/schema";
 import { decrypt, encrypt } from "./crypto";
@@ -134,6 +134,8 @@ export async function disconnectMailbox(mailbox: string, opts: { wipe: boolean }
   await getDb().transaction(async (tx) => {
     if (opts.wipe) {
       await tx.delete(accounts).where(eq(accounts.mailbox, mailbox));
+      // Decisions about a service are only kept while some mailbox still has that service.
+      await tx.delete(actions).where(and(eq(actions.targetType, "account"), notInArray(actions.targetId, tx.select({ d: accounts.domain }).from(accounts))));
       // The review log refers to newsletters by id, so it goes first.
       await tx.delete(actions).where(
         and(
