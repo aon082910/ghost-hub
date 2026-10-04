@@ -8,8 +8,9 @@ import { HibpError } from "@/lib/breaches/hibp";
 import { HibpDisabledError, HibpKeyMissingError, checkMailboxBreaches, refreshCatalog } from "@/lib/breaches/store";
 import { approvePending, markUnsubscribedManually, queueUnsubscribes, rejectPending, setKept } from "@/lib/newsletters/store";
 import { cancelProfileScan, startProfileScan } from "@/lib/profiles/runner";
-import { setServiceStatus } from "@/lib/deletion/store";
+import { setServiceStatuses } from "@/lib/deletion/store";
 import { addUsername, removeUsername } from "@/lib/profiles/store";
+import { isDepth, sinceFor } from "@/lib/scan/depth";
 import { cancelScan, startScan } from "@/lib/scan/registry";
 
 export type ConnectImapState = { error?: string };
@@ -53,7 +54,8 @@ export async function scanMailbox(formData: FormData) {
   await requireSession();
   const mailbox = formData.get("mailbox");
   if (typeof mailbox !== "string" || !(await findConnection(mailbox))) redirect("/");
-  await startScan(mailbox);
+  const depth = formData.get("depth");
+  await startScan(mailbox, { since: isDepth(depth) ? sinceFor(depth) : undefined });
   redirect("/");
 }
 
@@ -187,25 +189,25 @@ export async function cancelProfileCheck() {
 }
 
 /**
- * The user deleted the account themselves (Ghost-Hub never does) and is recording it. The domain is bound to the
- * action rather than read from the form, and validated again before it touches the database.
+ * The user deleted the account themselves (Ghost-Hub never does) and is recording it. The company's domains are
+ * bound to the action rather than read from the form, and validated again before they touch the database.
  */
-export async function markServiceDeleted(domain: string) {
+export async function markServiceDeleted(domains: string[]) {
   await requireSession();
-  await setServiceStatus(domain, "deleted");
+  await setServiceStatuses(domains, "deleted");
   redirect("/dashboard");
 }
 
 /** Hide a service from cleanup because the user wants to keep the account. */
-export async function keepService(domain: string) {
+export async function keepService(domains: string[]) {
   await requireSession();
-  await setServiceStatus(domain, "ignored");
+  await setServiceStatuses(domains, "ignored");
   redirect("/dashboard");
 }
 
 /** Put a deleted or kept service back on the active list. */
-export async function restoreService(domain: string) {
+export async function restoreService(domains: string[]) {
   await requireSession();
-  await setServiceStatus(domain, "active");
+  await setServiceStatuses(domains, "active");
   redirect("/dashboard");
 }

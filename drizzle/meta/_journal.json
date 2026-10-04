@@ -57,6 +57,13 @@
       "when": 1791132837128,
       "tag": "0007_bumpy_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791134870356,
+      "tag": "0008_glamorous_iron_fist",
+      "breakpoints": true
     }
   ]
 }

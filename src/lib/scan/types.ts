@@ -19,12 +19,14 @@ export type PagesOptions = {
   /** True for ids that were scanned before, so sources can avoid fetching them. */
   skip: (id: string) => boolean;
   signal?: AbortSignal;
+  /** Only read mail received on or after this date. Left out means the whole mailbox. */
+  since?: Date;
 };
 
 /** A mailbox we can read message headers from, newest first. */
 export interface MailSource {
-  /** Rough number of messages, for the progress bar. Null if unknown. */
-  total(): Promise<number | null>;
+  /** Rough number of messages (from `since` on, if given), for the progress bar. Null if unknown. */
+  total(since?: Date): Promise<number | null>;
   /** Pages of headers (not-skipped messages only). */
   pages(opts: PagesOptions): AsyncIterable<MessageHeader[]>;
   close(): Promise<void>;

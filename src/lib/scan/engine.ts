@@ -168,13 +168,13 @@ export function describeScanError(err: unknown): string {
   return msg.length > 300 ? `${msg.slice(0, 300)}...` : msg;
 }
 
-export type RunScanInput = { scanId: string; mailbox: string; source: MailSource; signal?: AbortSignal };
+export type RunScanInput = { scanId: string; mailbox: string; source: MailSource; signal?: AbortSignal; since?: Date };
 
 /**
  * Run a scan to completion, cancellation or failure, recording progress in the `scans` row.
  * Safe to run again after any stop: already-seen messages are skipped, so it continues where it left off.
  */
-export async function runScan({ scanId, mailbox, source, signal }: RunScanInput): Promise<"done" | "cancelled" | "failed"> {
+export async function runScan({ scanId, mailbox, source, signal, since }: RunScanInput): Promise<"done" | "cancelled" | "failed"> {
   const db = getDb();
   const finish = (status: string, error: string | null = null) =>
     db.update(scans).set({ status, error, finishedAt: new Date() }).where(eq(scans.id, scanId));
@@ -183,11 +183,11 @@ export async function runScan({ scanId, mailbox, source, signal }: RunScanInput)
     const seenRows = await db.select({ id: messagesSeen.messageId }).from(messagesSeen).where(eq(messagesSeen.mailbox, mailbox));
     const seen = new Set(seenRows.map((r) => r.id));
 
-    const total = await source.total().catch(() => null);
+    const total = await source.total(since).catch(() => null);
     // Resumed scans start at the fraction already done instead of 0.
     await db.update(scans).set({ messagesTotal: total, messagesProcessed: Math.min(seen.size, total ?? seen.size) }).where(eq(scans.id, scanId));
 
-    for await (const page of source.pages({ skip: (id) => seen.has(id), signal })) {
+    for await (const page of source.pages({ skip: (id) => seen.has(id), signal, since })) {
       signal?.throwIfAborted();
       await db.transaction(async (tx) => {
         await savePage(tx, mailbox, page);

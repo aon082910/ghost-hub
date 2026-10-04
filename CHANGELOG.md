@@ -13,9 +13,12 @@ First pre-release. Built and tested against fake provider servers; not yet run a
   Yahoo, AOL, iCloud or any IMAP server with an app password. Any number of mailboxes, encrypted credentials, disconnect
   with optional data wipe, and a "reconnect" prompt when a provider rejects a saved login.
 - **Inbox scan**: header-only scan of Gmail, Microsoft Graph and IMAP, resumable and cancellable, with live progress.
-  Finds services from sign-up, receipt, subscription and newsletter mail.
+  Finds services from sign-up, receipt, subscription and newsletter mail. A first scan of a very large mailbox can be
+  limited to the last 5 years, 2 years, year or 90 days; the dashboard says when it's working from a partial scan.
 - **Dashboard**: every service with a 0-100 risk score and a plain explanation, breach matching against Have I Been
   Pwned's public list (optional per-address check with your own key), filters, and a "forgotten account" signal.
+  A company that emails from several domains (amazon.com, amazon.co.uk...) is one row, merged only where the
+  deletion-guide dataset says the domains belong together.
 - **Newsletters**: review-first bulk unsubscribe using RFC 8058 one-click, hardened against hostile links, with
   manual help for senders that need a web page or an email, and a "still sending" flag.
 - **Deleting accounts**: step-by-step guides for about 2,600 services (from JustDeleteMe), your own record of what you
@@ -34,7 +37,6 @@ First pre-release. Built and tested against fake provider servers; not yet run a
 ### Known limitations
 
 - Not yet exercised against real Google, Microsoft or IMAP accounts. IMAP scanning is covered by tests with a fake client.
-- No scan depth limit: a very large mailbox is scanned in full.
 - Related domains (for example `amazon.com` and `amazon.co.uk`) are listed separately.
 - Account-deletion guides and profile sites are community data and can go stale.
 - Single user only.

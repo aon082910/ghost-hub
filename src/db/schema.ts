@@ -39,6 +39,8 @@ export const scans = pgTable("scans", {
   id: uuid("id").primaryKey().defaultRandom(),
   mailbox: text("mailbox").notNull(),
   status: text("status").notNull().default("running"), // running | done | failed | cancelled
+  /** Only mail from this date on was scanned. Null means the whole mailbox. */
+  since: timestamp("since", { withTimezone: true }),
   messagesTotal: integer("messages_total"),
   messagesProcessed: integer("messages_processed").notNull().default(0),
   error: text("error"),

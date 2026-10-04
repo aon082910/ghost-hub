@@ -75,6 +75,13 @@ published on GitHub so others can host their own.
   from the user's own domain is ignored, as is mail with no signal. A service's category is the strongest
   evidence seen. It's a heuristic and will have false positives and negatives; tune the regexes and add test
   cases when you find them.
+- **Depth limit:** a scan can be limited to recent mail (5 years, 2 years, 1 year or 90 days). Each source filters on
+  its own side (Gmail `after:<epoch seconds>`, Graph `$filter=receivedDateTime ge ...`, IMAP `SINCE`), the choice is
+  stored on the scan row (`scans.since`), and only the mail actually read is marked seen, so a later wider or full scan
+  fills in the rest without double counting. A limited scan makes a service's first-seen date later than reality, which
+  can make a breach look like it predates the account and lower its score, so the dashboard shows a notice for any
+  mailbox that has only limited or unfinished scans (`src/lib/scan/coverage.ts`). The progress total is "unknown" when
+  the source can't count a window cheaply (Gmail).
 - **Exactness:** each page of results and its "seen" ids are saved in one transaction, so a crash, cancel or
   restart can never double count or lose a message, and scanning again continues where it stopped. Scans left
   "running" by a restart are marked failed on startup. One scan runs per mailbox at a time.
@@ -156,6 +163,12 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
   takes requests by email, the address plus a request template. It's bundled in `src/lib/deletion/guides.json` and
   refreshed by `npm run guides:update` (fetches upstream, validates the shape, refuses to overwrite with a short list).
   Review the diff before committing: it's community data. Attribution lives in `docs/THIRD-PARTY.md`.
+- **One row per company**: services whose domains appear in the same guide are merged on the dashboard
+  (`src/lib/deletion/companies.ts`, `mergeCompanies` in `src/lib/dashboard.ts`), so `amazon.com` and `amazon.co.uk` are
+  scored, shown and recorded once. The busiest domain leads, message counts add up, dates widen, the strongest category
+  wins, and a breach naming any of the domains counts once. A merged row reads "deleted" or "kept" only when every
+  domain agrees, and recording a decision applies to all its domains in one transaction (at most 50, all validated or
+  none applied). Services with no guide are never merged, because joining by similar names would join unrelated sites.
 - **Matching** is by registrable domain, indexed from every domain an entry lists. A guide that lists the exact domain
   comes first, and at most three are shown. Services with no guide get a generic hint and a search link.
 - **Untrusted text**: dataset content is validated on load and only shown as plain text and links. A link is only offered
@@ -192,7 +205,6 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
 
 ## Known gaps / backlog
 
-- No scan depth limit (e.g. "last 3 years"); a very large mailbox is scanned in full.
 - Scans run inside the web server process; they don't survive a restart (they resume on the next scan).
 - IMAP has never been run against a real server, only a fake client.
 - Services are listed per domain; related domains (amazon.com / amazon.co.uk) aren't merged.

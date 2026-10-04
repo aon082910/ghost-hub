@@ -6,6 +6,7 @@ import { DIFFICULTY_HINT, DIFFICULTY_LABEL, guidesFor, type Difficulty } from "@
 import { CATEGORIES, isCategory } from "@/lib/discovered";
 import { requireSession } from "@/lib/auth";
 import { listConnections } from "@/lib/mailboxes";
+import { loadCoverage } from "@/lib/scan/coverage";
 import { checkMailbox, keepService, markServiceDeleted, refreshBreaches, restoreService } from "../actions";
 import { SiteHeader } from "../site-header";
 
@@ -70,7 +71,8 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
   const breachedOnly = one(sp, "breached") === "1";
   const show: Show = isShow(one(sp, "show")) ? (one(sp, "show") as Show) : "active";
 
-  const [all, status, connections, checks] = await Promise.all([loadServices(), catalogStatus(), listConnections(), loadChecks()]);
+  const [all, status, connections, checks, coverage] = await Promise.all([loadServices(), catalogStatus(), listConnections(), loadChecks(), loadCoverage()]);
+  const partial = [...coverage].filter(([, c]) => c.kind === "limited" || c.kind === "unfinished");
   // The tiles and type counts describe what's still on your list; the decisions you've made are counted separately.
   const summary = summarize(all.filter((s) => s.state === "active"));
   const decisions = decisionCounts(all);
@@ -116,6 +118,23 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
         </section>
       ) : (
         <>
+          {partial.length > 0 && (
+            <p role="note" className="mb-6 rounded-lg border border-amber-900 bg-amber-950/30 px-4 py-3 text-xs text-amber-200">
+              {partial.map(([mailbox, c]) => (
+                <span key={mailbox} className="block">
+                  {mailbox}:{" "}
+                  {c.kind === "limited"
+                    ? `only mail from ${c.since.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })} on has been scanned.`
+                    : "the last full scan didn't finish."}
+                </span>
+              ))}
+              <span className="mt-1 block text-amber-300/80">
+                Older sign-ups can be missing, and a service&apos;s first email may look later than it was, which can lower its risk score.
+                Run a full scan from the Mailboxes page for the complete picture.
+              </span>
+            </p>
+          )}
+
           <section aria-label="Summary" className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
             <Tile label="Services" value={summary.total} />
             <Tile label="High risk" value={summary.high} tone={summary.high ? "text-red-300" : undefined} />
@@ -297,7 +316,8 @@ function ServiceRow({ s }: { s: ServiceRisk }) {
           <div className="min-w-0">
             <div className="truncate text-sm text-zinc-100">{s.name}</div>
             <div className="truncate text-xs text-zinc-500">
-              {s.domain} · {CATEGORY_SINGULAR[s.category]} · {s.messages.toLocaleString("en-US")} emails, {years}
+              {s.domain}
+              {s.domains.length > 1 && ` +${s.domains.length - 1} more`} · {CATEGORY_SINGULAR[s.category]} · {s.messages.toLocaleString("en-US")} emails, {years}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -333,6 +353,7 @@ function ServiceRow({ s }: { s: ServiceRisk }) {
               </ul>
             )}
             {s.mailboxes > 1 && <p className="mt-1 text-zinc-500">Found in {s.mailboxes} of your mailboxes.</p>}
+            {s.domains.length > 1 && <p className="mt-1 text-zinc-500">Counts every address this company emails you from: {s.domains.join(", ")}.</p>}
           </div>
 
           {s.risk.breaches.length > 0 && (
@@ -389,9 +410,21 @@ const DIFFICULTY_STYLE: Record<Difficulty, string> = {
 
 const smallBtn = "rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500";
 
+/** The guides for every domain of a company, each guide once (domains of one company usually share a guide). */
+function uniqueGuides(domains: string[]) {
+  const seen = new Set<string>();
+  return domains
+    .flatMap((d) => guidesFor(d))
+    .filter((g) => {
+      const key = g.name + "|" + (g.openUrl ?? "");
+      return !seen.has(key) && !!seen.add(key);
+    })
+    .slice(0, 3);
+}
+
 /** How to delete the account, and the buttons to record what you decided. Ghost-Hub never deletes anything itself. */
 function DeleteSection({ s }: { s: ServiceRisk }) {
-  const guides = guidesFor(s.domain);
+  const guides = uniqueGuides(s.domains);
   return (
     <div>
       <div className="mb-1 font-medium text-zinc-300">Delete this account</div>
@@ -470,15 +503,15 @@ function DeleteSection({ s }: { s: ServiceRisk }) {
       <form className="mt-2 flex flex-wrap gap-2">
         {s.state === "active" ? (
           <>
-            <button formAction={markServiceDeleted.bind(null, s.domain)} className={smallBtn}>
+            <button formAction={markServiceDeleted.bind(null, s.domains)} className={smallBtn}>
               I&apos;ve deleted it
             </button>
-            <button formAction={keepService.bind(null, s.domain)} className={smallBtn} title="Hide this from cleanup">
+            <button formAction={keepService.bind(null, s.domains)} className={smallBtn} title="Hide this from cleanup">
               Keep it
             </button>
           </>
         ) : (
-          <button formAction={restoreService.bind(null, s.domain)} className={smallBtn}>
+          <button formAction={restoreService.bind(null, s.domains)} className={smallBtn}>
             {s.state === "deleted" ? "I haven't deleted it, put it back" : "Stop keeping it"}
           </button>
         )}

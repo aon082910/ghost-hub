@@ -34,15 +34,19 @@ export class GmailSource implements MailSource {
     );
   }
 
-  async total(): Promise<number | null> {
+  async total(since?: Date): Promise<number | null> {
+    // The profile only knows the size of the whole mailbox, so a limited scan has no honest estimate.
+    if (since) return null;
     const p = await this.get<{ messagesTotal?: number }>("/users/me/profile");
     return p?.messagesTotal ?? null;
   }
 
-  async *pages({ skip, signal }: PagesOptions): AsyncIterable<MessageHeader[]> {
+  async *pages({ skip, signal, since }: PagesOptions): AsyncIterable<MessageHeader[]> {
     let pageToken: string | undefined;
+    // Gmail's `after:` accepts epoch seconds, which avoids any time-zone guessing.
+    const query = since ? `${QUERY} after:${Math.floor(since.getTime() / 1000)}` : QUERY;
     do {
-      const params = new URLSearchParams({ maxResults: String(PAGE_SIZE), q: QUERY });
+      const params = new URLSearchParams({ maxResults: String(PAGE_SIZE), q: query });
       if (pageToken) params.set("pageToken", pageToken);
       const list = (await this.get<GmailList>(`/users/me/messages?${params}`, signal))!;
 

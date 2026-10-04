@@ -14,14 +14,16 @@ const release = () => {
   gates.clear();
 };
 let sourcesCreated = 0;
+let sinceSeen: Date | undefined | "unset" = "unset";
 vi.mock("./sources", () => ({
   createSource: async (): Promise<MailSource> => {
     sourcesCreated++;
     const gate = new Promise<void>((r) => gates.add(r));
     return {
       total: async () => 1,
-      pages: ({ signal }: PagesOptions) =>
+      pages: ({ signal, since }: PagesOptions) =>
         (async function* (): AsyncGenerator<MessageHeader[]> {
+          sinceSeen = since;
           signal?.throwIfAborted(); // like the real sources: checks current state, not just future events
           await Promise.race([
             gate,
@@ -56,6 +58,7 @@ describe.skipIf(!url)("scan registry (integration)", () => {
   };
   beforeEach(async () => {
     sourcesCreated = 0;
+    sinceSeen = "unset";
     gates.clear();
     await wipe();
   });
@@ -82,6 +85,23 @@ describe.skipIf(!url)("scan registry (integration)", () => {
     await until(() => !reg.isScanning(ME));
     expect(await statusOf(a.scanId)).toBe("done");
     expect(sourcesCreated).toBe(1);
+  });
+
+  it("remembers how far back a scan was asked to reach and passes it to the source", async () => {
+    const since = new Date("2024-01-01T00:00:00Z");
+    const { scanId } = await reg.startScan(ME, { since });
+    await until(() => sourcesCreated === 1);
+    release();
+    await until(() => !reg.isScanning(ME));
+    expect(sinceSeen).toEqual(since);
+    expect((await db.select().from(schema.scans).where(eq(schema.scans.id, scanId)))[0].since).toEqual(since);
+
+    const full = await reg.startScan(ME);
+    await until(() => sourcesCreated === 2);
+    release();
+    await until(() => !reg.isScanning(ME));
+    expect(sinceSeen).toBeUndefined();
+    expect((await db.select().from(schema.scans).where(eq(schema.scans.id, full.scanId)))[0].since).toBeNull();
   });
 
   it("different mailboxes scan independently, and a finished mailbox can scan again", async () => {

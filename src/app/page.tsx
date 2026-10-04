@@ -6,6 +6,7 @@ import { IMAP_PRESETS } from "@/lib/imap";
 import { listConnections } from "@/lib/mailboxes";
 import { OAUTH_PROVIDERS, getOAuthProvider } from "@/lib/oauth";
 import { loadServices, summarize } from "@/lib/dashboard";
+import { DEPTHS } from "@/lib/scan/depth";
 import { isScanning, latestScan } from "@/lib/scan/registry";
 import { cancelMailboxScan, disconnect, scanMailbox } from "./actions";
 import { ImapForm } from "./imap-form";
@@ -251,10 +252,11 @@ function ScanStatus({ mailbox, scan }: { mailbox: string; scan: LatestScan }) {
   }
 
   const when = scan?.finishedAt?.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  const reach = scan?.since ? ` from ${scan.since.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })} on` : "";
   const summary = !scan
     ? "Not scanned yet."
     : scan.status === "done"
-      ? `Scanned ${scan.messagesProcessed.toLocaleString("en-US")} messages, ${when}.`
+      ? `Scanned ${scan.messagesProcessed.toLocaleString("en-US")} messages${reach}, ${when}.`
       : scan.status === "cancelled"
         ? `Scan cancelled after ${scan.messagesProcessed.toLocaleString("en-US")} messages. Scanning again continues where it stopped.`
         : null;
@@ -264,8 +266,21 @@ function ScanStatus({ mailbox, scan }: { mailbox: string; scan: LatestScan }) {
       <p className={`text-xs ${scan?.status === "failed" ? "text-amber-400" : "text-zinc-500"}`}>
         {scan?.status === "failed" ? `Last scan failed: ${scan.error ?? "unknown error"}` : summary}
       </p>
-      <form action={scanMailbox}>
+      <form action={scanMailbox} className="flex items-center gap-2">
         <input type="hidden" name="mailbox" value={mailbox} />
+        <select
+          name="depth"
+          defaultValue="all"
+          aria-label="How far back to scan"
+          title="A first scan of a very large mailbox can take a while. You can scan recent mail first and the rest later."
+          className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300"
+        >
+          {DEPTHS.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.label}
+            </option>
+          ))}
+        </select>
         <button className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400">
           {scan ? "Scan again" : "Scan"}
         </button>

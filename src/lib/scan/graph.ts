@@ -52,9 +52,10 @@ export class GraphSource implements MailSource {
     );
   }
 
-  async total(): Promise<number | null> {
+  async total(since?: Date): Promise<number | null> {
     try {
-      const res = await (this.o.fetchImpl ?? fetch)(`${this.base}/me/messages/$count`, {
+      const filter = since ? `?$filter=${encodeURIComponent(`receivedDateTime ge ${since.toISOString()}`)}` : "";
+      const res = await (this.o.fetchImpl ?? fetch)(`${this.base}/me/messages/$count${filter}`, {
         headers: { authorization: `Bearer ${await this.o.getToken()}`, consistencylevel: "eventual" },
         signal: AbortSignal.timeout(30_000),
       });
@@ -78,11 +79,13 @@ export class GraphSource implements MailSource {
     return this.skippedFolderIds;
   }
 
-  async *pages({ skip, signal }: PagesOptions): AsyncIterable<MessageHeader[]> {
+  async *pages({ skip, signal, since }: PagesOptions): AsyncIterable<MessageHeader[]> {
     const skipFolders = await this.loadSkippedFolders(signal);
     const select = "id,receivedDateTime,from,subject,parentFolderId,internetMessageHeaders";
+    // Graph requires the filtered property to lead the $orderby, which it already does.
+    const filter = since ? `&$filter=${encodeURIComponent(`receivedDateTime ge ${since.toISOString()}`)}` : "";
     let url: string | undefined =
-      `${this.base}/me/messages?$select=${select}&$orderby=receivedDateTime desc&$top=${PAGE_SIZE}`;
+      `${this.base}/me/messages?$select=${select}${filter}&$orderby=receivedDateTime desc&$top=${PAGE_SIZE}`;
 
     while (url) {
       signal?.throwIfAborted();

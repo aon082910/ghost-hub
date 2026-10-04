@@ -16,7 +16,7 @@ export type ImapScanClient = {
   status(path: string, query: { messages: true }): Promise<false | { messages?: number }>;
   getMailboxLock(path: string): Promise<{ release(): void }>;
   mailbox: false | { uidValidity?: bigint | number | string };
-  search(query: { all: true }, opts: { uid: true }): Promise<number[] | false>;
+  search(query: { all: true } | { since: Date }, opts: { uid: true }): Promise<number[] | false>;
   fetch(
     range: string,
     query: { uid: true; envelope: true; internalDate: true; headers: string[] },
@@ -59,23 +59,33 @@ export class ImapSource implements MailSource {
     return this.folders;
   }
 
-  async total(): Promise<number | null> {
+  async total(since?: Date): Promise<number | null> {
     let sum = 0;
     for (const f of await this.listFolders()) {
-      const s = await this.client.status(f.path, { messages: true });
-      sum += (s && s.messages) || 0;
+      if (since) {
+        const lock = await this.client.getMailboxLock(f.path);
+        try {
+          sum += ((await this.client.search({ since }, { uid: true })) || []).length;
+        } finally {
+          lock.release();
+        }
+      } else {
+        const s = await this.client.status(f.path, { messages: true });
+        sum += (s && s.messages) || 0;
+      }
     }
     return sum;
   }
 
-  async *pages({ skip, signal }: PagesOptions): AsyncIterable<MessageHeader[]> {
+  async *pages({ skip, signal, since }: PagesOptions): AsyncIterable<MessageHeader[]> {
     for (const folder of await this.listFolders()) {
       signal?.throwIfAborted();
       const lock = await this.client.getMailboxLock(folder.path);
       try {
         // uidValidity changes if the server renumbers a folder, which correctly invalidates old ids.
         const validity = String(this.client.mailbox ? (this.client.mailbox.uidValidity ?? 0) : 0);
-        const uids = ((await this.client.search({ all: true }, { uid: true })) || []).sort((a, b) => b - a);
+        const query = since ? { since } : { all: true as const };
+        const uids = ((await this.client.search(query, { uid: true })) || []).sort((a, b) => b - a);
 
         for (const group of chunk(uids, FETCH_CHUNK)) {
           signal?.throwIfAborted();
