@@ -18,17 +18,38 @@ export type GmailSourceOptions = HttpDeps & {
   getToken: () => Promise<string>;
   base?: string;
   concurrency?: number;
+  /**
+   * Requests per second to stay under. Gmail allows about 15,000 quota units a minute per user and a message lookup costs
+   * 5, so 40 a second (12,000 a minute) leaves headroom. Infinity turns pacing off.
+   */
+  requestsPerSecond?: number;
 };
 
 /** Reads message headers through the Gmail API with the read-only scope. Bodies are never requested. */
 export class GmailSource implements MailSource {
   constructor(private readonly o: GmailSourceOptions) {}
 
+  private nextSlot = 0;
+
+  /** Space requests out, across all concurrent workers, so a fast connection can't burst past Gmail's quota. */
+  private async pace(signal?: AbortSignal): Promise<void> {
+    const interval = 1000 / (this.o.requestsPerSecond ?? 40);
+    if (!(interval > 0) || !Number.isFinite(interval)) return;
+    const now = Date.now();
+    const wait = Math.max(0, this.nextSlot - now);
+    this.nextSlot = Math.max(now, this.nextSlot) + interval;
+    if (wait > 0) {
+      signal?.throwIfAborted();
+      await (this.o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(wait);
+    }
+  }
+
   private get base() {
     return this.o.base ?? gmailApiBase();
   }
 
   private async get<T>(path: string, signal?: AbortSignal, allow404 = false): Promise<T | null> {
+    await this.pace(signal);
     return requestJson<T>(
       `${this.base}${path}`,
       { headers: { authorization: `Bearer ${await this.o.getToken()}` } },

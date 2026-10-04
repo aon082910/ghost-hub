@@ -108,6 +108,12 @@ published on GitHub so others can host their own.
   clears its scan history, then rescans. Rows are kept, so decisions (deleted / kept / unsubscribed) survive, and a row
   with no messages is hidden until a scan finds it again. It's refused while a scan is running. Older data has no spam
   counts, and skipped-as-seen messages are never re-read, so this is how existing mailboxes pick them up.
+- **Gmail quota:** Gmail allows about 15,000 quota units a minute per user and a message lookup costs 5, so `GmailSource` spaces
+  requests to 40 a second (12,000 units a minute) across all concurrent workers. Gmail reports being throttled as a 403 (reason
+  `rateLimitExceeded`, `userRateLimitExceeded` or `RATE_LIMIT_EXCEEDED`), not a 429, and a per-minute quota only clears when the
+  minute rolls over, so a throttled request is retried up to six times with waits of 5, 10, 20, 40, 60 and 60 seconds (or
+  `Retry-After` if longer, capped at 30). A scan of a big mailbox is therefore limited by Google, not by Ghost-Hub: about 2,400
+  messages a minute.
 - **Exactness:** each page of results and its "seen" ids are saved in one transaction, so a crash, cancel or
   restart can never double count or lose a message, and scanning again continues where it stopped. Scans left
   "running" by a restart are marked failed on startup. One scan runs per mailbox at a time.

@@ -25,7 +25,8 @@ First pre-release. Built and tested against fake provider servers; not yet run a
   entered in the app, with the steps and the exact redirect address to register shown beside each field. Secrets are
   stored encrypted and never shown again; a saved value wins over `.env`, which still works as the fallback.
 - A refused Gmail or Graph request now says why (for example, the Gmail API isn't switched on, with Google's link)
-  instead of "HTTP 403", and Gmail's rate-limit 403s are retried.
+  instead of "HTTP 403", Gmail requests are paced to 40 a second to stay under Google's per-minute quota, and when Google
+  still says "quota exceeded" Ghost-Hub waits up to a minute between retries instead of failing the scan.
 - **Dashboard**: every service with a 0-100 risk score and a plain explanation, breach matching against Have I Been
   Pwned's public list (optional per-address check with your own key), filters, and a "forgotten account" signal.
   A company that emails from several domains (amazon.com, amazon.co.uk...) is one row, merged only where the

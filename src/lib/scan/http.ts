@@ -52,8 +52,12 @@ export function retryAfterMs(header: string | null, fallbackMs: number): number 
   return Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds, 30) * 1000 : fallbackMs;
 }
 
+// A per-minute quota only clears when the minute rolls over, so a throttled request waits far longer than a server error does.
+const RATE_LIMIT_RETRIES = 6;
+const rateLimitDelayMs = (attempt: number) => Math.min(60_000, 5_000 * 2 ** attempt);
+
 /**
- * GET/POST JSON with retries on throttling (429) and server errors (5xx), honouring Retry-After.
+ * GET/POST JSON with retries on throttling (429, or Gmail's quota 403) and server errors (5xx), honouring Retry-After.
  * Returns null on 404 when `allow404` is set (e.g. a message deleted mid-scan).
  */
 export async function requestJson<T>(
@@ -71,11 +75,12 @@ export async function requestJson<T>(
     if (res.ok) return (await res.json()) as T;
     if (res.status === 404 && allow404) return null;
     const info = await readApiError(res);
-    const retryable = res.status === 429 || res.status >= 500 || (res.status === 403 && info.reason !== null && RATE_LIMIT_REASONS.has(info.reason));
-    if (!retryable || attempt >= retries) {
+    const throttled = res.status === 429 || (res.status === 403 && info.reason !== null && RATE_LIMIT_REASONS.has(info.reason));
+    const retryable = throttled || res.status >= 500;
+    if (!retryable || attempt >= (throttled ? Math.max(retries, RATE_LIMIT_RETRIES) : retries)) {
       throw new ScanHttpError(res.status, `Request failed with HTTP ${res.status}`, info);
     }
-    await sleep(retryAfterMs(res.headers.get("retry-after"), 500 * 2 ** attempt));
+    await sleep(retryAfterMs(res.headers.get("retry-after"), throttled ? rateLimitDelayMs(attempt) : 500 * 2 ** attempt));
   }
 }
 

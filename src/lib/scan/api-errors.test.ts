@@ -98,3 +98,80 @@ describe("describeScanError for refused requests", () => {
     expect(describeScanError(await err(400, "not json"))).toBe("The mail service refused the request (HTTP 400).");
   });
 });
+
+describe("backing off when Gmail's quota is hit", () => {
+  const quota = () => json({ error: { code: 403, message: "Quota exceeded", errors: [{ reason: "rateLimitExceeded" }], details: [{ reason: "RATE_LIMIT_EXCEEDED" }] } }, 403);
+
+  it("waits longer each time, up to a minute, and keeps trying for several minutes before giving up", async () => {
+    const waits: number[] = [];
+    const f = vi.fn<typeof fetch>(async () => quota());
+    const err = (await requestJson("https://x", {}, { fetchImpl: f, sleep: async (ms) => void waits.push(ms) }).catch((e) => e)) as ScanHttpError;
+    expect(err).toBeInstanceOf(ScanHttpError);
+    expect(err.info.reason).toBe("RATE_LIMIT_EXCEEDED");
+    expect(waits).toEqual([5000, 10000, 20000, 40000, 60000, 60000]); // a per-minute quota only clears when the minute rolls over
+    expect(f).toHaveBeenCalledTimes(7);
+  });
+
+  it("recovers as soon as the quota clears, and honours Retry-After", async () => {
+    const waits: number[] = [];
+    let n = 0;
+    const f = vi.fn<typeof fetch>(async () => (n++ < 2 ? new Response(JSON.stringify({ error: { details: [{ reason: "RATE_LIMIT_EXCEEDED" }] } }), { status: 403, headers: { "retry-after": "12" } }) : json({ ok: 1 }, 200)));
+    expect(await requestJson("https://x", {}, { fetchImpl: f, sleep: async (ms) => void waits.push(ms) })).toEqual({ ok: 1 });
+    expect(waits).toEqual([12000, 12000]);
+  });
+
+  it("keeps the short, fixed retry budget for ordinary server errors", async () => {
+    const waits: number[] = [];
+    const f = vi.fn<typeof fetch>(async () => new Response("", { status: 503 }));
+    await requestJson("https://x", {}, { fetchImpl: f, sleep: async (ms) => void waits.push(ms) }).catch(() => {});
+    expect(waits).toEqual([500, 1000, 2000, 4000]);
+  });
+});
+
+describe("Gmail request pacing", () => {
+  it("spaces requests out so a fast connection stays under the quota", async () => {
+    const { GmailSource } = await import("./gmail");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z")); // time stands still, so the waits are exact
+    try {
+      const waits: number[] = [];
+      const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+        const u = new URL(String(input));
+        if (u.pathname.endsWith("/users/me/messages")) return json({ messages: ["a", "b", "c", "d"].map((id) => ({ id })) }, 200);
+        return json({ id: decodeURIComponent(u.pathname.split("/").pop()!), internalDate: "1700000000000", payload: { headers: [{ name: "From", value: "x@y.com" }] } }, 200);
+      });
+      const src = new GmailSource({ getToken: async () => "t", fetchImpl, base: "https://gmail.test/v1", sleep: async (ms) => void waits.push(ms), requestsPerSecond: 10, concurrency: 4 });
+      for await (const page of src.pages({ skip: () => false })) void page;
+      // 1 list + 4 message lookups = 5 requests, one every 100 ms; the first goes straight out.
+      expect(waits).toEqual([100, 200, 300, 400]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("can be switched off", async () => {
+    const { GmailSource } = await import("./gmail");
+    const waits: number[] = [];
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({ messages: [] }, 200));
+    const src = new GmailSource({ getToken: async () => "t", fetchImpl, base: "https://gmail.test/v1", sleep: async (ms) => void waits.push(ms), requestsPerSecond: Infinity });
+    for await (const page of src.pages({ skip: () => false })) void page;
+    expect(waits).toEqual([]);
+  });
+
+  it("defaults to 40 requests a second, which is 12,000 quota units a minute against Gmail's 15,000", async () => {
+    const { GmailSource } = await import("./gmail");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    try {
+      const waits: number[] = [];
+      const fetchImpl = vi.fn<typeof fetch>(async () => json({ messages: [] }, 200));
+      const src = new GmailSource({ getToken: async () => "t", fetchImpl, base: "https://gmail.test/v1", sleep: async (ms) => void waits.push(ms) });
+      await src.total(); // profile request, then two more
+      await src.total();
+      await src.total();
+      expect(waits).toEqual([25, 50]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
