@@ -1,10 +1,6 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  // Fail fast on bad configuration, then bring the schema up to date before serving requests.
-  const { getEnv } = await import("./lib/env");
-  getEnv();
-  const { runMigrations } = await import("./db/migrate");
-  await runMigrations();
-  const { markInterruptedScans } = await import("./lib/scan/registry");
-  await markInterruptedScans();
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { startup } = await import("./instrumentation-node");
+    await startup();
+  }
 }

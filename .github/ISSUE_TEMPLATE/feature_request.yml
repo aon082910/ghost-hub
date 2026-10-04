@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ghost-Hub reads message headers only and sends nothing about you without being asked. Ideas that fit that are
+        very welcome; ones that need message bodies or new outbound requests are worth discussing first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to see?
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy considerations
+      description: Would it read more of a mailbox, store more, or contact a new service?

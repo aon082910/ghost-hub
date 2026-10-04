@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/login", "/api/health"];
+// robots.txt must be readable while signed out, or crawlers would be redirected to the login page instead of told to stay away.
+export const PUBLIC_PATHS = ["/login", "/api/health", "/robots.txt"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

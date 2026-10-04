@@ -1,8 +1,14 @@
 import { z } from "zod";
 
+// Values people leave in from an example file or pick first. Refused so a default never protects real data.
+const PLACEHOLDER_PASSWORDS = new Set(["change-me", "changeme", "password", "12345678", "123456789", "admin1234", "ghost-hub", "ghosthub"]);
+
 const schema = z.object({
   APP_URL: z.url().default("http://localhost:3000"),
-  ADMIN_PASSWORD: z.string().min(8, "ADMIN_PASSWORD must be at least 8 characters"),
+  ADMIN_PASSWORD: z
+    .string()
+    .min(8, "ADMIN_PASSWORD must be at least 8 characters")
+    .refine((v) => !PLACEHOLDER_PASSWORDS.has(v.toLowerCase()), "ADMIN_PASSWORD is still a placeholder. Choose your own password"),
   ENCRYPTION_KEY: z
     .string()
     .refine((v) => Buffer.from(v, "base64").length === 32, {

@@ -1,6 +1,32 @@
 {
   "name": "ghost-hub",
   "version": "0.1.0",
+  "description": "Self-hosted digital-footprint cleaner: find the accounts tied to your mailboxes, see what's been breached, and clean up. Review-first, privacy-first.",
+  "license": "MIT",
+  "author": "aon082910",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aon082910/ghost-hub.git"
+  },
+  "homepage": "https://github.com/aon082910/ghost-hub#readme",
+  "bugs": {
+    "url": "https://github.com/aon082910/ghost-hub/issues"
+  },
+  "keywords": [
+    "self-hosted",
+    "privacy",
+    "unraid",
+    "docker",
+    "gmail",
+    "outlook",
+    "imap",
+    "data-breach",
+    "account-cleanup",
+    "nextjs"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "scripts": {
     "dev": "next dev",

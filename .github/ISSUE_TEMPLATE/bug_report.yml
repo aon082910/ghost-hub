@@ -1,0 +1,42 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Please don't paste email content, addresses, tokens, passwords or your `.env`.**
+        If it's a security problem, use the private route in SECURITY.md instead of this form.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Connect a Gmail mailbox\n2. Press Scan\n3. ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Mailbox type involved
+      options: [Gmail, Outlook / Microsoft 365, Yahoo, AOL / iCloud / other IMAP, None / not sure]
+  - type: input
+    id: version
+    attributes:
+      label: Ghost-Hub version or commit
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it?
+      options: [Unraid template, Docker Compose, npm run dev, Other]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: From `docker logs`. Remove anything personal first.
+      render: text

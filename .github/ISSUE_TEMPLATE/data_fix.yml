@@ -1,0 +1,29 @@
+name: Fix a profile site or deletion guide
+description: A site stopped working, or a deletion guide is wrong or missing
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Profile sites are in `src/lib/profiles/sites.json` and deletion guides come from the JustDeleteMe dataset.
+        A pull request is even better than an issue: see CONTRIBUTING.md.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What needs fixing?
+      options: [A profile site returns wrong answers, A profile site should be added, A deletion guide is wrong, A deletion guide is missing]
+    validations:
+      required: true
+  - type: input
+    id: site
+    attributes:
+      label: Site or service
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: For a profile site, what it answers for a username that exists and for one that doesn't (status code, or text in the page). For a guide, the correct deletion page. Please don't include your own details.
+    validations:
+      required: true

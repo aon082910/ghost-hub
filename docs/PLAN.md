@@ -175,6 +175,21 @@ Unsubscribe links come out of emails, and anyone can send you an email, so every
 - A `<button formAction={fn}>` inside a form doesn't submit its own `name`/`value`. Row-level buttons bind their id
   instead (`fn.bind(null, id)`); a form-level `action` does include the clicked button's value.
 
+## Operations
+
+- **Start-up** (`src/instrumentation.ts` → `instrumentation-node.ts`): validate the environment, wait up to about a minute
+  for the database, run migrations, then mark scans a restart interrupted as failed. Any failure logs `[ghost-hub] Cannot
+  start: ...` and exits with code 1 in production (rethrows in development), so a misconfigured container is visibly
+  broken rather than "running" and returning HTTP 500.
+- **Health**: `GET /api/health` (public) checks the database; the image's `HEALTHCHECK` uses it.
+- **Gate** (`src/proxy.ts`): everything needs a session except `/login`, `/api/health` and `/robots.txt` (crawlers must be
+  able to read it while signed out), plus static files and images.
+- **Headers** (`next.config.ts`): `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a permissions policy,
+  COOP, and a CSP limited to framing, forms, base URL and plugins (a script policy would need per-request nonces).
+- **Setup notes** (`src/lib/setup-checks.ts`): warns about plain `http` off localhost, OAuth over `http`, and short passwords.
+  The login also refuses placeholder passwords outright.
+- **Image**: multi-stage, non-root, `NEXT_TELEMETRY_DISABLED=1`, OCI labels, about 310 MB (mostly the Node base image).
+
 ## Known gaps / backlog
 
 - No scan depth limit (e.g. "last 3 years"); a very large mailbox is scanned in full.

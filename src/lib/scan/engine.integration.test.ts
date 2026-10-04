@@ -282,6 +282,10 @@ describe.skipIf(!url)("scan engine (integration)", () => {
     await runScan({ scanId: id5, mailbox: ME, source: boom(new DOMException("The operation was aborted due to timeout", "TimeoutError")) });
     expect((await scanRow(id5)).error).toMatch(/took too long/);
 
+    const id6 = await newScan();
+    await runScan({ scanId: id6, mailbox: ME, source: boom(new Error("Unsupported state or unable to authenticate data")) });
+    expect((await scanRow(id6)).error).toMatch(/ENCRYPTION_KEY.*reconnect/);
+
     const id4 = await newScan();
     await runScan({ scanId: id4, mailbox: ME, source: boom(new Error("x".repeat(1000))) });
     expect((await scanRow(id4)).error!.length).toBeLessThan(400);

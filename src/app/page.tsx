@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
+import { getEnv } from "@/lib/env";
+import { setupNotes } from "@/lib/setup-checks";
 import { IMAP_PRESETS } from "@/lib/imap";
 import { listConnections } from "@/lib/mailboxes";
 import { OAUTH_PROVIDERS, getOAuthProvider } from "@/lib/oauth";
@@ -62,6 +64,7 @@ export default async function Home(props: PageProps<"/">) {
   await requireSession();
   const [sp, connections] = await Promise.all([props.searchParams, listConnections()]);
   const note = banner(sp);
+  const setup = setupNotes(getEnv());
   const scansByMailbox = new Map(await Promise.all(connections.map(async (c) => [c.mailbox, await latestScan(c.mailbox)] as const)));
   const summary = summarize((await loadServices()).filter((s) => s.state === "active"));
   const oauthButtons = Object.values(OAUTH_PROVIDERS).map((p) => ({
@@ -91,6 +94,22 @@ export default async function Home(props: PageProps<"/">) {
         >
           {note.text}
         </p>
+      )}
+
+      {setup.length > 0 && (
+        <section aria-label="Setup notes" className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+          <h2 className="text-sm font-medium text-zinc-200">Setup notes</h2>
+          <ul className="mt-2 space-y-2">
+            {setup.map((n) => (
+              <li key={n.text} className={`flex gap-2 text-xs ${n.level === "warn" ? "text-amber-300" : "text-zinc-400"}`}>
+                <span aria-hidden="true" className="mt-px shrink-0">
+                  {n.level === "warn" ? "!" : "i"}
+                </span>
+                <span>{n.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-5">

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -13,8 +13,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ghost-Hub",
+  title: { default: "Ghost-Hub", template: "%s · Ghost-Hub" },
   description: "Self-hosted digital-footprint cleaner.",
+  // A private, signed-in tool: it should never show up in a search engine.
+  robots: { index: false, follow: false, nocache: true },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

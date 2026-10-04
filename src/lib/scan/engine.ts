@@ -161,6 +161,10 @@ export function describeScanError(err: unknown): string {
   if (e?.authenticationFailed) return "The mail server rejected the saved login. Reconnect this mailbox with a new app password.";
   if (e?.code && /^(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT)$/.test(e.code)) return "Couldn't reach the mail server. Try again in a moment.";
   const msg = e?.message ?? "Unknown error";
+  // AES-GCM refusing to open stored credentials means ENCRYPTION_KEY isn't the one they were saved with.
+  if (/unable to authenticate data/i.test(msg)) {
+    return "Ghost-Hub can't read this mailbox's saved login. The ENCRYPTION_KEY has probably changed since it was connected: reconnect the mailbox.";
+  }
   return msg.length > 300 ? `${msg.slice(0, 300)}...` : msg;
 }
 
