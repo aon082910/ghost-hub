@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { OAuthError, getOAuthProvider, isOAuthProviderId } from "@/lib/oauth";
-import { saveConnection } from "@/lib/mailboxes";
+import { MailboxConflictError, saveConnection } from "@/lib/mailboxes";
 import { OAUTH_COOKIE, OAUTH_COOKIE_PATH, appUrl, readOAuthCookie, statesMatch } from "@/lib/oauth-flow";
 
 export const dynamic = "force-dynamic";
@@ -35,9 +35,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!tokens.refreshToken) return done("/?error=no_refresh_token");
 
     const { email } = await provider.fetchProfile(tokens.accessToken);
-    await saveConnection({ provider: id, mailbox: email, refreshToken: tokens.refreshToken, scopes: tokens.scope });
-    return done(`/?connected=${encodeURIComponent(email)}`);
+    const { replaced } = await saveConnection({ provider: id, mailbox: email, refreshToken: tokens.refreshToken, scopes: tokens.scope });
+    return done(`/?connected=${encodeURIComponent(email)}${replaced ? "&again=1" : ""}`);
   } catch (err) {
+    if (err instanceof MailboxConflictError) return done(`/?error=mailbox_conflict&with=${encodeURIComponent(err.existingProvider)}`);
     console.error(`[ghost-hub] ${provider.label} OAuth callback failed:`, err instanceof OAuthError ? err.code : err);
     return done("/?error=exchange_failed");
   }

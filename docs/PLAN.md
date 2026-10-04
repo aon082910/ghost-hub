@@ -114,6 +114,12 @@ published on GitHub so others can host their own.
   minute rolls over, so a throttled request is retried up to six times with waits of 5, 10, 20, 40, 60 and 60 seconds (or
   `Retry-After` if longer, capped at 30). A scan of a big mailbox is therefore limited by Google, not by Ghost-Hub: about 2,400
   messages a minute.
+- **Several accounts:** connections are unique per (provider, address), and everything else is filed under the address alone, so
+  one address can't be connected through two providers (`MailboxConflictError`). Google's authorization uses
+  `prompt=select_account consent`; with `consent` alone Google reuses the signed-in account and a second one can't be chosen.
+  `saveConnection` reports `replaced` so the page can say "already connected, login refreshed" instead of implying a new
+  account was added. Scans, services and newsletters are per mailbox and merged on the dashboard; wiping one mailbox leaves the
+  others alone.
 - **Exactness:** each page of results and its "seen" ids are saved in one transaction, so a crash, cancel or
   restart can never double count or lose a message, and scanning again continues where it stopped. Scans left
   "running" by a restart are marked failed on startup. One scan runs per mailbox at a time.

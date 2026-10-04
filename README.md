@@ -13,7 +13,8 @@ breached, and clean up, on your own hardware with your own credentials. Your ema
 ## What it does
 
 1. **Connect** — Gmail (Google OAuth), Outlook / Microsoft 365 (Microsoft OAuth) and Yahoo, AOL, iCloud or any
-   IMAP mailbox (app password). All read-only, any number of mailboxes.
+   IMAP mailbox (app password). All read-only, and as many accounts as you like from each provider (two Gmail accounts, three Yahoo addresses and an
+   Outlook, say). "Scan all" runs the same scan on every mailbox, and the dashboard merges what they find.
 2. **Scan** — finds the services you've signed up for from sign-up, welcome, verification and receipt emails (message
    headers only). A first scan of a huge mailbox can be limited to recent mail and widened later. Spam, Trash, Sent and
    Drafts are skipped unless you tick **Include spam, trash & sent**, which suits an old mailbox you're closing. It can also look

@@ -11,8 +11,29 @@ type SaveInput =
   | { provider: "google" | "microsoft"; mailbox: string; refreshToken: string; scopes: string }
   | { provider: "imap"; mailbox: string; imap: ImapCredentials };
 
-/** Insert or replace a connection. Reconnecting clears `needsReauth`. */
-export async function saveConnection(input: SaveInput) {
+/**
+ * Everything Ghost-Hub keeps (scans, services, newsletters) is filed under the mailbox address, so the same address can't
+ * be connected through two providers at once, for example Gmail by OAuth and also by IMAP.
+ */
+export class MailboxConflictError extends Error {
+  constructor(
+    public readonly mailbox: string,
+    public readonly existingProvider: string,
+  ) {
+    super(`${mailbox} is already connected through ${existingProvider}`);
+    this.name = "MailboxConflictError";
+  }
+}
+
+/**
+ * Insert or replace a connection. Reconnecting clears `needsReauth`. Any number of different mailboxes per provider is
+ * fine. Returns `replaced: true` when this refreshed a connection that already existed, so the page can say so instead
+ * of letting someone think a second account was added.
+ */
+export async function saveConnection(input: SaveInput): Promise<{ replaced: boolean }> {
+  const [existing] = await getDb().select({ provider: mailboxConnections.provider }).from(mailboxConnections).where(eq(mailboxConnections.mailbox, input.mailbox));
+  if (existing && existing.provider !== input.provider) throw new MailboxConflictError(input.mailbox, existing.provider);
+
   const base =
     input.provider === "imap"
       ? {
@@ -38,6 +59,7 @@ export async function saveConnection(input: SaveInput) {
       set: { ...values, connectedAt: new Date() },
     });
   accessTokenCache.delete(input.mailbox);
+  return { replaced: existing !== undefined };
 }
 
 export async function listConnections() {

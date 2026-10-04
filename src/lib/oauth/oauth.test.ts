@@ -43,7 +43,7 @@ describe("auth URLs", () => {
     expect(p.get("redirect_uri")).toBe("https://hub.example.com/api/auth/google/callback");
     expect(p.get("scope")).toBe(GMAIL_SCOPE);
     expect(p.get("access_type")).toBe("offline");
-    expect(p.get("prompt")).toBe("consent");
+    expect(p.get("prompt")).toBe("select_account consent");
     expect(p.get("state")).toBe("st");
     expect(p.get("code_challenge")).toBe("ch");
     expect(p.get("code_challenge_method")).toBe("S256");

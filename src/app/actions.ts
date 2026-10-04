@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { ImapConnectError, parseImapForm, verifyImapLogin } from "@/lib/imap";
-import { disconnectMailbox, findConnection, saveConnection } from "@/lib/mailboxes";
+import { MailboxConflictError, disconnectMailbox, findConnection, listConnections, saveConnection } from "@/lib/mailboxes";
 import { HibpError } from "@/lib/breaches/hibp";
 import { HibpDisabledError, HibpKeyMissingError, checkMailboxBreaches, refreshCatalog } from "@/lib/breaches/store";
 import { approvePending, markUnsubscribedManually, queueUnsubscribes, rejectPending, setKept } from "@/lib/newsletters/store";
@@ -46,8 +46,16 @@ export async function connectImap(_prev: ConnectImapState, formData: FormData): 
     throw err;
   }
 
-  await saveConnection({ provider: "imap", mailbox: parsed.credentials.user, imap: parsed.credentials });
-  redirect(`/?connected=${encodeURIComponent(parsed.credentials.user)}`);
+  let replaced = false;
+  try {
+    ({ replaced } = await saveConnection({ provider: "imap", mailbox: parsed.credentials.user, imap: parsed.credentials }));
+  } catch (err) {
+    if (err instanceof MailboxConflictError) {
+      return { error: `${err.mailbox} is already connected through ${err.existingProvider === "imap" ? "IMAP" : err.existingProvider}. Disconnect it first if you want to connect it this way instead.` };
+    }
+    throw err;
+  }
+  redirect(`/?connected=${encodeURIComponent(parsed.credentials.user)}${replaced ? "&again=1" : ""}`);
 }
 
 /** Start scanning a connected mailbox in the background. Safe to click twice: it won't start a second scan. */
@@ -60,6 +68,16 @@ export async function scanMailbox(formData: FormData) {
   if (formData.get("fresh") === "on") await resetScanData(mailbox);
   await startScan(mailbox, { since: isDepth(depth) ? sinceFor(depth) : undefined, includeJunk: formData.get("includeJunk") === "on" });
   redirect("/");
+}
+
+/** Start the same scan on every connected mailbox that still has a working login. Each one runs on its own. */
+export async function scanAllMailboxes(formData: FormData) {
+  await requireSession();
+  const depth = formData.get("depth");
+  const opts = { since: isDepth(depth) ? sinceFor(depth) : undefined, includeJunk: formData.get("includeJunk") === "on" };
+  const targets = (await listConnections()).filter((c) => !c.needsReauth);
+  for (const c of targets) await startScan(c.mailbox, opts);
+  redirect(`/?scanning=${targets.length}`);
 }
 
 export async function cancelMailboxScan(formData: FormData) {

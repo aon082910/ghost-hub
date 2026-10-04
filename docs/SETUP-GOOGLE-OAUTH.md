@@ -30,6 +30,12 @@ Google only accepts `http://` redirect URIs for `localhost`, and rejects bare IP
 
 `APP_URL` must be exactly the address you use in the browser, and the redirect URI you register must match it.
 
+## More than one Gmail account
+
+Click **Add another Gmail account** and choose a different account on Google's sign-in screen. While the consent screen is in
+Testing status, add each extra Gmail address as a test user first. Choosing an account that is already connected just
+refreshes its login.
+
 ## "HTTP 403" when scanning
 
 Almost always the Gmail API isn't switched on for your project (step 2). Ghost-Hub shows Google's own reason and a link to switch

@@ -15,7 +15,9 @@ export const google = createOAuthProvider({
   supportsRevoke: true,
   authParams: {
     access_type: "offline", // ask for a refresh token
-    prompt: "consent", // Google only returns a refresh token on consent
+    // Google only returns a refresh token on consent. `select_account` always shows the account chooser: with just
+    // `consent`, Google silently reuses the one signed-in account, so a second Gmail account could never be added.
+    prompt: "select_account consent",
     include_granted_scopes: "false",
   },
   credentials: googleCredentials,

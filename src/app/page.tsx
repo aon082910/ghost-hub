@@ -8,7 +8,7 @@ import { OAUTH_PROVIDERS, getOAuthProvider } from "@/lib/oauth";
 import { loadServices, summarize } from "@/lib/dashboard";
 import { DEPTHS } from "@/lib/scan/depth";
 import { isScanning, latestScan } from "@/lib/scan/registry";
-import { cancelMailboxScan, disconnect, scanMailbox } from "./actions";
+import { cancelMailboxScan, disconnect, scanAllMailboxes, scanMailbox } from "./actions";
 import { ImapForm } from "./imap-form";
 import { ScanProgress } from "./scan-progress";
 import { googleConfig, microsoftConfig } from "@/lib/config";
@@ -37,10 +37,23 @@ type Params = Record<string, string | string[] | undefined>;
 function banner(sp: Params) {
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
   const error = one("error");
+  if (error === "mailbox_conflict") {
+    const other = PROVIDER_NAME[one("with") ?? ""] ?? "another provider";
+    return { tone: "error" as const, text: `That address is already connected through ${other}. Disconnect it first if you want to connect it this way instead.` };
+  }
   if (error) return { tone: "error" as const, text: ERRORS[error] ?? "Something went wrong." };
 
   const connected = one("connected");
-  if (connected) return { tone: "ok" as const, text: `Connected ${connected}.` };
+  if (connected) {
+    return {
+      tone: "ok" as const,
+      text: one("again")
+        ? `${connected} was already connected, so its login was refreshed. To add a different account, pick it (or "Use another account") on the sign-in screen.`
+        : `Connected ${connected}.`,
+    };
+  }
+  const scanning = one("scanning");
+  if (scanning) return { tone: "ok" as const, text: `Started scanning ${scanning} mailbox${scanning === "1" ? "" : "es"}.` };
 
   const gone = one("disconnected");
   if (gone === "missing") return { tone: "error" as const, text: "That mailbox was already disconnected." };
@@ -169,6 +182,24 @@ export default async function Home(props: PageProps<"/">) {
           </ul>
         )}
 
+        {connections.filter((c) => !c.needsReauth).length > 1 && (
+          <form action={scanAllMailboxes} className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2">
+            <span className="text-xs text-zinc-300">Scan all {connections.filter((c) => !c.needsReauth).length} mailboxes</span>
+            <select name="depth" defaultValue="all" aria-label="How far back to scan" className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300">
+              {DEPTHS.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1 text-xs text-zinc-400">
+              <input type="checkbox" name="includeJunk" className="accent-emerald-500" />
+              Include spam, trash &amp; sent
+            </label>
+            <button className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400">Scan all</button>
+          </form>
+        )}
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {oauthButtons.map((p) =>
             p.configured ? (
@@ -177,7 +208,7 @@ export default async function Home(props: PageProps<"/">) {
                 href={`/api/auth/${p.id}/start`}
                 className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
               >
-                Connect {PROVIDER_NAME[p.id]}
+                {connections.some((c) => c.provider === p.id) ? `Add another ${PROVIDER_NAME[p.id]} account` : `Connect ${PROVIDER_NAME[p.id]}`}
               </a>
             ) : (
               <span key={p.id} className="rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-500">

@@ -12,6 +12,10 @@ First pre-release. Built and tested against fake provider servers; not yet run a
 - **Mailboxes**: Gmail and Outlook / Microsoft 365 over OAuth (authorization code with PKCE, read-only scopes), and
   Yahoo, AOL, iCloud or any IMAP server with an app password. Any number of mailboxes, encrypted credentials, disconnect
   with optional data wipe, and a "reconnect" prompt when a provider rejects a saved login.
+- **Several accounts per provider**: connect as many Gmail, Outlook or IMAP accounts as you like. Google's account chooser is
+  always shown (it used to silently reuse the signed-in account, so a second Gmail account couldn't be added), the page says
+  when a connect only refreshed an account that was already there, one address can't be connected through two providers at
+  once, and "Scan all" starts the same scan on every mailbox.
 - **Inbox scan**: header-only scan of Gmail, Microsoft Graph and IMAP, resumable and cancellable, with live progress.
   Finds services from sign-up, receipt, subscription and newsletter mail. A first scan of a very large mailbox can be
   limited to the last 5 years, 2 years, year or 90 days; the dashboard says when it's working from a partial scan.

@@ -67,10 +67,42 @@ describe.skipIf(!url)("mailboxes (integration)", () => {
     expect(rows[0].needsReauth).toBe(false); // reconnecting clears the flag
   });
 
-  it("keeps the same address on different providers apart", async () => {
+  it("refuses one address through two providers, because everything is filed under the address", async () => {
     await oauth("same@example.com", "g", "google");
-    await oauth("same@example.com", "m", "microsoft");
-    expect(await db.select().from(schema.mailboxConnections)).toHaveLength(2);
+    await expect(oauth("same@example.com", "m", "microsoft")).rejects.toMatchObject({ name: "MailboxConflictError", existingProvider: "google" });
+    const imap = { host: "imap.example.com", port: 993, user: "same@example.com", pass: "pw" };
+    await expect(m.saveConnection({ provider: "imap", mailbox: imap.user, imap })).rejects.toBeInstanceOf(m.MailboxConflictError);
+    const rows = await db.select().from(schema.mailboxConnections);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].provider).toBe("google"); // the refused attempt changed nothing
+    expect(decrypt(rows[0].credentialEnc)).toBe("g");
+  });
+
+  it("holds any number of accounts from one provider, and says when a connect only refreshed one", async () => {
+    expect(await oauth("one@gmail.com", "rt-1")).toEqual({ replaced: false });
+    expect(await oauth("two@gmail.com", "rt-2")).toEqual({ replaced: false });
+    expect(await oauth("three@gmail.com", "rt-3")).toEqual({ replaced: false });
+    expect(await oauth("outlook@outlook.com", "rt-4", "microsoft")).toEqual({ replaced: false });
+    expect(await oauth("outlook2@hotmail.com", "rt-5", "microsoft")).toEqual({ replaced: false });
+    expect((await m.listConnections()).map((c) => c.mailbox).sort()).toEqual(["one@gmail.com", "outlook2@hotmail.com", "outlook@outlook.com", "three@gmail.com", "two@gmail.com"]);
+
+    expect(await oauth("two@gmail.com", "rt-2b")).toEqual({ replaced: true }); // same account again
+    expect(await m.listConnections()).toHaveLength(5);
+    expect(decrypt((await m.findConnection("two@gmail.com"))!.credentialEnc)).toBe("rt-2b");
+    expect(decrypt((await m.findConnection("one@gmail.com"))!.credentialEnc)).toBe("rt-1"); // the others are untouched
+  });
+
+  it("deleting one account's data leaves the other accounts of the same provider alone", async () => {
+    await oauth("a@gmail.com");
+    await oauth("b@gmail.com");
+    for (const mailbox of ["a@gmail.com", "b@gmail.com"]) {
+      await db.insert(schema.accounts).values({ mailbox, domain: "shop.com", name: "Shop", category: "account", firstSeen: new Date(), lastSeen: new Date(), messageCount: 3 });
+      await db.insert(schema.messagesSeen).values({ mailbox, messageId: "x1" });
+    }
+    await m.disconnectMailbox("a@gmail.com", { wipe: true });
+    expect((await m.listConnections()).map((c) => c.mailbox)).toEqual(["b@gmail.com"]);
+    expect((await db.select().from(schema.accounts)).map((r) => r.mailbox)).toEqual(["b@gmail.com"]);
+    expect((await db.select().from(schema.messagesSeen)).map((r) => r.mailbox)).toEqual(["b@gmail.com"]);
   });
 
   it("stores an IMAP app password encrypted with its server, and reads it back", async () => {
